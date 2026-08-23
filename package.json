@@ -1,0 +1,30 @@
+{
+  "name": "ios-cal-sub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "iOS 日历订阅生成器:配置驱动生成静态 .ics(中国节假日调休补班 / 农历生日 / 自定义周期事件)",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "cal:fetch": "tsx scripts/fetch-holidays.ts",
+    "cal:build": "tsx src/generate.ts",
+    "cal:verify": "tsx verify/verify.ts",
+    "cal:web": "tsx src/web/server.ts",
+    "cal:key": "tsx src/keygen.ts",
+    "cal:all": "pnpm cal:build && pnpm cal:verify"
+  },
+  "dependencies": {
+    "lunar-typescript": "^1.8.6",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "ts-ics": "^2.4.6",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}

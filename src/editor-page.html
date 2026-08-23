@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ios-cal-sub · 在线编辑器</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg:#f5f5f7; --card:#fff; --text:#1d1d1f; --muted:#6e6e73;
+    --line:#d2d2d7; --accent:#0a84ff; --danger:#ff3b30; --ok:#34c759;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1c1e; --card:#2c2c2e; --text:#f2f2f7; --muted:#98989d; --line:#48484a; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+  header { position:sticky; top:0; z-index:10; background:var(--bg); border-bottom:1px solid var(--line);
+           padding:12px 18px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; flex:1; min-width:220px; }
+  main { max-width:880px; margin:0 auto; padding:16px 14px 90px; }
+  .btn { padding:8px 15px; border-radius:9px; border:none; background:var(--accent); color:#fff;
+         cursor:pointer; font-size:14px; text-decoration:none; display:inline-block; }
+  .btn.secondary { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  .btn.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  .btn.danger { background:transparent; color:var(--danger); border:1px solid var(--danger); }
+  .btn.small { padding:4px 10px; font-size:13px; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; margin:4px 0 16px; }
+  .tab { padding:7px 14px; border-radius:999px; border:1px solid var(--line);
+         background:var(--card); cursor:pointer; font-size:14px; user-select:none; }
+  .tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .cardbox { background:var(--card); border:1px solid var(--line); border-radius:14px;
+             padding:14px 16px; margin-bottom:14px; }
+  .ev { display:flex; align-items:center; gap:12px; padding:11px 2px; border-bottom:1px solid var(--line); }
+  .ev:last-child { border-bottom:none; }
+  .ev .ico { font-size:21px; width:26px; text-align:center; }
+  .ev .info { flex:1; min-width:0; }
+  .ev .t { font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ev .s { font-size:12.5px; color:var(--muted); margin-top:2px; word-break:break-all; }
+  .ev .ops { display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; }
+  h2.sect { font-size:14px; color:var(--muted); margin:20px 0 10px; font-weight:600; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
+  label.f { display:flex; flex-direction:column; gap:5px; font-size:13px; color:var(--muted); }
+  label.f > span b { color:var(--text); font-weight:500; }
+  input, select { font:inherit; padding:8px 10px; border-radius:9px; border:1px solid var(--line);
+                  background:var(--bg); color:var(--text); width:100%; }
+  input:focus, select:focus { outline:2px solid #0a84ff55; border-color:var(--accent); }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { padding:5px 11px; border-radius:999px; border:1px solid var(--line);
+          cursor:pointer; font-size:13px; user-select:none; display:inline-block; }
+  .chip.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  dialog { border:none; border-radius:16px; background:var(--card); color:var(--text);
+           max-width:660px; width:calc(100vw - 32px); padding:0; }
+  dialog::backdrop { background:rgba(0,0,0,.45); }
+  .dlg-h { display:flex; align-items:center; justify-content:space-between; padding:15px 18px;
+           border-bottom:1px solid var(--line); }
+  .dlg-h h3 { margin:0; font-size:16px; }
+  .dlg-b { padding:16px 18px; max-height:64vh; overflow:auto; }
+  .dlg-f { padding:12px 18px; border-top:1px solid var(--line); display:flex; gap:10px; justify-content:flex-end; }
+  .typegrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; margin-bottom:16px; }
+  .typeopt { padding:11px 8px; border-radius:12px; border:2px solid var(--line); text-align:center;
+             cursor:pointer; font-size:12.5px; }
+  .typeopt .i { font-size:22px; display:block; margin-bottom:4px; }
+  .typeopt.on { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,transparent); }
+  #lock { position:fixed; inset:0; z-index:50; background:var(--bg); display:flex;
+          align-items:center; justify-content:center; }
+  #lock .box { width:min(400px,92vw); text-align:center; }
+  #lock input { text-align:center; letter-spacing:.06em; font-size:16px; margin:14px 0; }
+  #log { white-space:pre-wrap; font:12px/1.6 ui-monospace,Consolas,monospace; background:var(--card);
+         border:1px solid var(--line); border-radius:12px; padding:10px 14px; margin-top:12px;
+         max-height:180px; overflow:auto; display:none; }
+  .hint { font-size:12.5px; color:var(--muted); line-height:1.7; }
+  .row { display:flex; gap:10px; align-items:end; flex-wrap:wrap; }
+  #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--text);
+           color:var(--bg); padding:10px 20px; border-radius:999px; font-size:14px; opacity:0;
+           transition:opacity .25s; pointer-events:none; max-width:92vw; z-index:99; }
+  #toast.show { opacity:1; } #toast.err { background:var(--danger); color:#fff; }
+</style>
+</head>
+<body>
+
+<div id="lock" style="display:none">
+  <div class="box cardbox">
+    <div style="font-size:34px">🔐</div>
+    <h2 style="margin:8px 0">编辑器已锁定</h2>
+    <p class="hint">输入访问密钥(UUID)解锁。密钥由站长通过 <code>pnpm cal:key</code> 生成。</p>
+    <input id="lockKey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+    <button class="btn" style="width:100%" onclick="tryUnlock()">🔓 解锁</button>
+    <p class="hint" id="lockHint" style="margin-top:10px"></p>
+  </div>
+</div>
+
+<header>
+  <h1>📅 在线编辑器 <span class="hint" id="meta"></span></h1>
+  <a class="btn ghost small" href="../index.html">👁 订阅页</a>
+  <button class="btn ghost small" onclick="openGh()">🔑 GitHub 设置</button>
+  <button class="btn ghost small" onclick="openSettings()">⚙ 全局设置</button>
+  <button class="btn" id="saveBtn" onclick="saveToGithub()">🚀 保存到 GitHub</button>
+</header>
+<main>
+  <div class="tabs" id="tabs"></div>
+  <div id="calPanel"></div>
+  <div id="log"></div>
+  <p class="hint" style="margin-top:14px" id="footNote"></p>
+</main>
+
+<dialog id="dlg"><div class="dlg-h"><h3 id="dlgTitle">编辑事件</h3>
+  <button class="btn ghost small" onclick="closeDlg()">✕</button></div>
+  <div class="dlg-b" id="dlgBody"></div>
+  <div class="dlg-f">
+    <button class="btn ghost" onclick="closeDlg()">取消</button>
+    <button class="btn" id="dlgOk" onclick="submitDlg()">确定</button>
+  </div>
+</dialog>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const TYPES = {
+  'lunar':       { icon:'🌙', label:'农历生日 / 纪念日' },
+  'solar':       { icon:'📌', label:'固定公历日期' },
+  'rule':        { icon:'⏰', label:'周期规则' },
+  'solar-term':  { icon:'⛅', label:'节气事件' },
+  'holidays-cn': { icon:'🇨🇳', label:'节假日数据源' },
+};
+const TERMS = ['立春','雨水','惊蛰','春分','清明','谷雨','立夏','小满','芒种','夏至','小暑','大暑',
+               '立秋','处暑','白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至','小寒','大寒'];
+const WEEKDAYS = [['mon','周一'],['tue','周二'],['wed','周三'],['thu','周四'],['fri','周五'],['sat','周六'],['sun','周日']];
+const ALARM_DAYS = [0,1,2,3,7,14];
+const CN_MONTH = ['正','二','三','四','五','六','七','八','九','十','冬','腊'];
+
+let cfg = null, metaTime = '';
+let active = 0, editState = null, editSnapshot = null;
+let auth = { enabled:false, sha256:'', hint:'' };
+let gh = { owner:'', repo:'', branch:'main', pat:'', remember:false };
+
+// 构建时由 generate.ts 注入与 Node 端完全一致的 YAML 序列化函数:
+const dumpYaml = /*__INLINE_YAML_DUMP__*/null;
+
+const $ = (id)=>document.getElementById(id);
+const esc = (s)=>String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function toast(msg, isErr){ const t=$('toast'); t.textContent=msg; t.className='show'+(isErr?' err':'');
+  setTimeout(()=>{t.className='';}, isErr?5200:2800); }
+
+async function sha256Hex(str){
+  const buf = new TextEncoder().encode(str.trim());
+  const dig = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(dig)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+/* ---------- 门禁 ---------- */
+async function gate(){
+  auth = await (await fetch('./auth.json',{cache:'no-store'})).json();
+  if (!auth.enabled) { $('footNote').textContent =
+    '⚠️ 当前未启用访问密钥(calendars.yaml 里没有 editor_auth)。任何人都能打开本页;提交修改仍需要你的 GitHub Token。'; return; }
+  if (sessionStorage.getItem('ics_unlocked') === auth.sha256) return;
+  $('lock').style.display='flex';
+  $('lockHint').textContent = auth.hint ? ('提示:'+auth.hint) : '';
+  $('lockKey').focus();
+  return new Promise((resolve)=>{
+    $('lockKey').onkeydown = (e)=>{ if(e.key==='Enter') tryUnlock().then(resolve); };
+    window._unlockResolve = resolve;
+  });
+}
+async function tryUnlock(){
+  const v = $('lockKey').value;
+  const h = await sha256Hex(v);
+  if (h === auth.sha256) {
+    sessionStorage.setItem('ics_unlocked', h);
+    $('lock').style.display='none';
+    toast('✅ 已解锁');
+    if (window._unlockResolve){ window._unlockResolve(); window._unlockResolve=null; }
+  } else { toast('密钥不对,再试试', true); }
+}
+
+/* ---------- 加载 ---------- */
+async function load(){
+  auth && null;
+  const r = await fetch('../data.json',{cache:'no-store'});
+  const j = await r.json();
+  cfg = j.config; metaTime = j.generated_at || '';
+  $('meta').textContent = '· 配置生成于 ' + metaTime + '(以最后一次部署为准)';
+  // 从 github.io 地址推断 owner/repo
+  try {
+    const u = new URL(location.href);
+    const m = u.hostname.match(/^([a-z0-9-]+)\.github\.io$/i);
+    if (m){
+      gh.owner = m[1];
+      gh.repo = u.pathname.split('/')[1] || m[1];
+      if (gh.repo.toLowerCase() === m[1] + '.github.io') gh.repo = m[1] + '.github.io';
+    }
+  } catch{}
+  const savedPat = localStorage.getItem('ics_pat');
+  if (savedPat) { gh.pat = savedPat; gh.remember = true; }
+  render();
+}
+
+/* ---------- 渲染 ---------- */
+function summarize(s){
+  const parts=[];
+  if (s.type==='lunar'){
+    parts.push(`农历${CN_MONTH[s.lunar_month-1]}月${s.lunar_day}日`, s.kind==='birthday'?'生日':'纪念日');
+    if (s.birth_year) parts.push(`出生${s.birth_year}`);
+  } else if (s.type==='solar'){ parts.push(`每年 ${String(s.month).padStart(2,'0')}-${String(s.day).padStart(2,'0')}`); }
+  else if (s.type==='rule'){
+    const f={weekly:'每周',monthly:'每月',yearly:'每年',once:'单次'}[s.freq]||s.freq;
+    let d='';
+    if (s.freq==='weekly') d=(WEEKDAYS.find(w=>w[0]===s.weekday)||['',''])[1];
+    if (s.freq==='monthly') d=`${s.day} 号`;
+    if (s.freq==='yearly') d=`${s.month} 月 ${s.day} 日`;
+    if (s.freq==='once') d=s.date||'';
+    parts.push((`${f} · ${d}`).replace(/ · $/,''));
+    if (s.end) parts.push('至 '+s.end);
+  } else if (s.type==='solar-term'){
+    let p=s.term;
+    if (s.offset_days) p+=` ${s.offset_days>0?'+':''}${s.offset_days}天`;
+    if ((s.days??1)>1) p+=` 起·连续${s.days}天`;
+    parts.push(p);
+  } else if (s.type==='holidays-cn'){
+    parts.push([s.include_rest_days!==false&&'放假', s.include_workdays&&'补班'].filter(Boolean).join('+')||'未选择');
+  }
+  if (s.time) parts.push(s.time);
+  const al=[...(s.alarm_days_before??[]).map(n=>`提前${n}天`), ...(s.alarms??[])];
+  if (al.length) parts.push('提醒:'+al.join(','));
+  if (s.note) parts.push(s.note);
+  return parts.join(' · ');
+}
+
+function renderTabs(){
+  const el=$('tabs');
+  el.innerHTML = cfg.calendars.map((c,i)=>
+    `<span class="tab ${i===active?'active':''}" data-i="${i}">${esc(c.name)}</span>`).join('')
+    + `<span class="tab" id="addCalBtn">＋ 新建日历</span>`;
+  el.querySelectorAll('.tab[data-i]').forEach(n=>n.onclick=()=>{active=Number(n.dataset.i);render();});
+  $('addCalBtn').onclick=openNewCalendar;
+}
+
+function renderCal(){
+  const c=cfg.calendars[active];
+  const panel=$('calPanel');
+  panel.innerHTML=`
+    <div class="cardbox"><div class="row">
+      <label class="f" style="flex:2;min-width:170px"><span><b>日历名称</b>(iPhone 显示)</span>
+        <input id="calName" value="${esc(c.name)}"></label>
+      <label class="f" style="flex:3;min-width:200px"><span>描述(可选)</span>
+        <input id="calDesc" value="${esc(c.description??'')}"></label>
+      <button class="btn danger small" id="delCalBtn">删除日历</button>
+    </div></div>
+    <div class="cardbox">
+      ${c.sources.map((s,i)=>`
+      <div class="ev">
+        <span class="ico">${TYPES[s.type]?.icon||'❓'}</span>
+        <div class="info">
+          <div class="t">${esc(s.title||TYPES[s.type]?.label||s.type)}</div>
+          <div class="s">${esc(summarize(s))}</div>
+        </div>
+        <div class="ops">
+          <button class="btn ghost small" data-up="${i}" ${i===0?'disabled':''}>↑</button>
+          <button class="btn ghost small" data-down="${i}" ${i===c.sources.length-1?'disabled':''}>↓</button>
+          <button class="btn secondary small" data-edit="${i}">✎</button>
+          <button class="btn danger small" data-del="${i}">🗑</button>
+        </div>
+      </div>`).join('') || '<p class="hint">还没有事件,点下面按钮添加。</p>'}
+      <div style="margin-top:12px"><button class="btn" id="addEvBtn">＋ 添加事件</button></div>
+    </div>`;
+  $('calName').onchange=e=>{cfg.calendars[active].name=e.target.value.trim()||c.name;renderTabs();};
+  $('calDesc').onchange=e=>{cfg.calendars[active].description=e.target.value.trim()||undefined;};
+  $('delCalBtn').onclick=()=>{ if(!confirm(`确定删除「${c.name}」及其 ${c.sources.length} 个事件?`))return;
+    cfg.calendars.splice(active,1); active=Math.max(0,active-1); render(); };
+  $('addEvBtn').onclick=()=>openEventForm(active,-1);
+  panel.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openEventForm(active,Number(b.dataset.edit)));
+  panel.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{ if(!confirm('删除这条事件?'))return;
+    cfg.calendars[active].sources.splice(Number(b.dataset.del),1); render(); });
+  panel.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>moveSrc(Number(b.dataset.up),-1));
+  panel.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>moveSrc(Number(b.dataset.down),1));
+}
+function moveSrc(i,d){ const a=cfg.calendars[active].sources; [a[i],a[i+d]]=[a[i+d],a[i]]; render(); }
+function render(){ if(!cfg)return; renderTabs(); renderCal(); }
+
+/* ---------- 表单 ---------- */
+function fld(label,inner){return `<label class="f"><span><b>${label}</b></span>${inner}</label>`;}
+function commonFields(s){
+  return `<div class="grid">
+    ${fld('标题(必填)',`<input id="f_title" value="${esc(s.title??'')}" placeholder="如:妈妈生日">`)}
+    ${fld('提醒时间(留空=全天)',`<input id="f_time" type="time" value="${esc(s.time??'')}">`)}</div>
+    <h2 class="sect">提醒方式</h2>
+    <div class="grid">
+    <div class="f"><span><b>提前几天全天提醒</b></span>
+      <div class="chips" id="f_adb">${ALARM_DAYS.map(d=>
+        `<span class="chip ${(s.alarm_days_before??[]).includes(d)?'on':''}" data-d="${d}">${d===0?'当天':'前 '+d+' 天'}</span>`).join('')}</div></div>
+    ${fld('自定义提醒(逗号分隔)',`<input id="f_alarms" value="${esc((s.alarms??[]).join(','))}" placeholder="-P1D,-PT9H">`)}</div>
+    ${fld('备注(可选)',`<input id="f_note" value="${esc(s.note??'')}">`)}`;
+}
+function readCommon(s){
+  s.title=$('f_title').value.trim();
+  const t=$('f_time').value; if(t)s.time=t; else delete s.time;
+  const adb=[...document.querySelectorAll('#f_adb .chip.on')].map(n=>Number(n.dataset.d)).sort((a,b)=>a-b);
+  if(adb.length)s.alarm_days_before=adb; else delete s.alarm_days_before;
+  const al=$('f_alarms').value.split(',').map(x=>x.trim()).filter(Boolean);
+  if(al.length)s.alarms=al; else delete s.alarms;
+  const note=$('f_note').value.trim(); if(note)s.note=note; else delete s.note;
+}
+const FORMS={
+  'lunar'(s){return `<div class="grid">
+    ${fld('农历月份',`<select id="f_lm">${CN_MONTH.map((m,i)=>`<option value="${i+1}" ${s.lunar_month===i+1?'selected':''}>${m}月</option>`).join('')}</select>`)}
+    ${fld('农历日期(初一=1)',`<input id="f_ld" type="number" min="1" max="30" value="${s.lunar_day??1}">`)}
+    ${fld('类型',`<select id="f_kind"><option value="birthday" ${s.kind!=='memorial'?'selected':''}>🎂 生日</option><option value="memorial" ${s.kind==='memorial'?'selected':''}>🕯️ 纪念日</option></select>`)}
+    ${fld('出生年份(公历,可选→虚岁)',`<input id="f_by" type="number" min="1900" max="2100" value="${s.birth_year??''}">`)}</div>`;},
+  'read-lunar'(s){s.lunar_month=Number($('f_lm').value);s.lunar_day=Number($('f_ld').value);s.kind=$('f_kind').value;
+    const by=$('f_by').value?Number($('f_by').value):undefined;if(by)s.birth_year=by;else delete s.birth_year;},
+  'solar'(s){return `<div class="grid">
+    ${fld('月份',`<select id="f_m">${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${s.month===i+1?'selected':''}>${i+1} 月</option>`).join('')}</select>`)}
+    ${fld('日期',`<input id="f_d" type="number" min="1" max="31" value="${s.day??1}">`)}</div>`;},
+  'read-solar'(s){s.month=Number($('f_m').value);s.day=Number($('f_d').value);},
+  'rule'(s){return `<div class="grid">${fld('重复频率',`<select id="f_freq">${['monthly','weekly','yearly','once'].map(f=>`<option value="${f}" ${(s.freq??'monthly')===f?'selected':''}>${({weekly:'每周',monthly:'每月',yearly:'每年',once:'单次'})[f]}</option>`).join('')}</select>`)}</div>
+    <div class="cond grid" id="ruleCond"></div>`;},
+  'read-rule'(s){s.freq=$('f_freq').value;const g=id=>$(id)?.value;
+    delete s.weekday;delete s.day;delete s.month;delete s.date;
+    if(s.freq==='weekly')s.weekday=g('f_wd');
+    if(s.freq==='monthly')s.day=Number(g('f_md'));
+    if(s.freq==='yearly'){s.month=Number(g('f_ym'));s.day=Number(g('f_yd'));}
+    if(s.freq==='once'&&g('f_od'))s.date=g('f_od');
+    const st=g('f_start'),en=g('f_end');
+    if(st)s.start=st;else delete s.start;
+    if(en)s.end=en;else delete s.end;},
+  'solar-term'(s){return `<div class="grid">
+    ${fld('节气',`<select id="f_term">${TERMS.map(t=>`<option ${s.term===t?'selected':''}>${t}</option>`).join('')}</select>`)}
+    ${fld('偏移天数(前一天=-1)',`<input id="f_off" type="number" min="-30" max="30" value="${s.offset_days??0}">`)}
+    ${fld('连续展开天数',`<input id="f_days" type="number" min="1" max="15" value="${s.days??1}">`)}</div>`;},
+  'read-solar-term'(s){s.term=$('f_term').value;s.offset_days=Number($('f_off').value);s.days=Number($('f_days').value)||1;},
+  'holidays-cn'(s){return `<div class="hint" style="margin-bottom:10px">每日历最多一个数据源,勾选要生成的类别:</div>
+    <div class="chips"><span class="chip ${s.include_rest_days!==false?'on':''}" id="f_rest">🎉 放假日</span>
+    <span class="chip ${!!s.include_workdays?'on':''}" id="f_work">💼 调休补班(Apple 缺失)</span></div>`;},
+  'read-holidays-cn'(s){s.include_rest_days=$('f_rest').classList.contains('on');
+    s.include_workdays=$('f_work').classList.contains('on');
+    delete s.title;delete s.time;delete s.note;delete s.alarms;delete s.alarm_days_before;},
+};
+function renderRuleCond(){
+  const box=$('ruleCond'); if(!box)return;
+  const fq=$('f_freq').value, s=editSnapshot; let html='';
+  if(fq==='weekly') html+=fld('星期几',`<select id="f_wd">${WEEKDAYS.map(w=>`<option value="${w[0]}" ${s.weekday===w[0]?'selected':''}>${w[1]}</option>`).join('')}</select>`);
+  if(fq==='monthly') html+=fld('每月几号',`<input id="f_md" type="number" min="1" max="31" value="${s.day??1}">`);
+  if(fq==='yearly') html+=fld('月份',`<select id="f_ym">${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${s.month===i+1?'selected':''}>${i+1} 月</option>`).join('')}</select>`)
+    +fld('日期',`<input id="f_yd" type="number" min="1" max="31" value="${s.day??1}">`);
+  if(fq==='once') html+=fld('具体日期',`<input id="f_od" type="date" value="${esc(s.date??'')}">`);
+  html+=fld('开始日期(可选)',`<input id="f_start" type="date" value="${esc(s.start??'')}">`)
+    +fld('结束日期(可选)',`<input id="f_end" type="date" value="${esc(s.end??'')}">`);
+  box.innerHTML=html;
+}
+function openEventForm(ci,si){
+  const isNew=si===-1, existing=isNew?null:cfg.calendars[ci].sources[si];
+  editSnapshot=structuredClone(existing??{}); editState={ci,si};
+  $('dlgTitle').textContent=isNew?'添加事件':'编辑事件';
+  $('dlgBody').innerHTML=`
+    ${isNew?`<div class="typegrid">${Object.entries(TYPES).map(([t,m])=>
+      `<div class="typeopt ${t==='lunar'?'on':''}" data-t="${t}"><span class="i">${m.icon}</span>${m.label}</div>`).join('')}</div>`
+      :`<p class="hint">类型:${TYPES[existing.type].icon} ${TYPES[existing.type].label}(改类型请删除重加)</p>`}
+    <div class="grid" style="margin-bottom:14px">${commonFields(editSnapshot)}</div>
+    <div id="typedFields"></div>`;
+  function bindCommon(){
+    $('f_title').onchange=e=>editSnapshot.title=e.target.value.trim();
+    $('f_time').onchange=e=>{if(e.target.value)editSnapshot.time=e.target.value;else delete editSnapshot.time;};
+    document.querySelectorAll('#f_adb .chip').forEach(ch=>ch.onclick=()=>ch.classList.toggle('on'));
+    $('f_alarms').onchange=e=>{const al=e.target.value.split(',').map(x=>x.trim()).filter(Boolean);
+      if(al.length)editSnapshot.alarms=al;else delete editSnapshot.alarms;};
+    $('f_note').onchange=e=>{if(e.target.value.trim())editSnapshot.note=e.target.value.trim();else delete editSnapshot.note;};
+  }
+  function renderTyped(t){
+    editSnapshot.type=t;
+    $('typedFields').innerHTML=FORMS[t]?FORMS[t](editSnapshot):'';
+    if(t==='rule'){$('f_freq').onchange=renderRuleCond;renderRuleCond();}
+    bindCommon();
+  }
+  if(isNew) $('dlg').querySelectorAll('.typeopt').forEach(op=>op.onclick=()=>{
+    $('dlg').querySelectorAll('.typeopt').forEach(o=>o.classList.remove('on'));
+    op.classList.add('on'); renderTyped(op.dataset.t);
+  });
+  renderTyped(existing?.type??'lunar');
+  $('dlg').showModal();
+}
+function closeDlg(){ $('dlgOk').onclick=submitDlg; $('dlg').close(); }
+function submitDlg(){
+  const {ci,si}=editState; const s=structuredClone(editSnapshot);
+  readCommon(s); FORMS['read-'+s.type]?.(s);
+  if(!s.title){toast('标题不能为空',true);return;}
+  if(si===-1)cfg.calendars[ci].sources.push(s); else cfg.calendars[ci].sources[si]=s;
+  closeDlg(); render(); toast('已加入列表,记得「保存到 GitHub」才会生效');
+}
+function openNewCalendar(){
+  $('dlgTitle').textContent='新建日历';
+  $('dlgBody').innerHTML=`<div class="grid">
+    ${fld('日历 ID(小写英文,创建后不可改)',`<input id="nc_id" placeholder="my-calendar">`)}
+    ${fld('日历名称',`<input id="nc_name" placeholder="🎂 我的日历">`)}</div>`;
+  $('dlg').showModal();
+  $('dlgOk').onclick=()=>{
+    const id=$('nc_id').value.trim(),name=$('nc_name').value.trim();
+    if(!/^[a-z0-9][a-z0-9-]{0,62}$/.test(id)){toast('ID 只能是小写字母数字连字符',true);return;}
+    if(!name){toast('名称不能为空',true);return;}
+    if(cfg.calendars.some(c=>c.id===id)){toast('ID 已存在',true);return;}
+    cfg.calendars.push({id,name,sources:[]});
+    active=cfg.calendars.length-1; closeDlg(); render();
+  };
+}
+function openSettings(){
+  $('dlgTitle').textContent='全局设置';
+  $('dlgBody').innerHTML=`<div class="grid">
+    ${fld('site_base_url(部署地址,可留空)',`<input id="st_base" value="${esc(cfg.site_base_url??'')}" placeholder="https://you.github.io/repo">`)}
+    ${fld('时区',`<select id="st_tz">${['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Singapore','UTC'].map(z=>`<option ${cfg.defaults.timezone===z?'selected':''}>${z}</option>`).join('')}</select>`)}
+    ${fld('向未来展开几年',`<input id="st_ya" type="number" min="1" max="10" value="${cfg.defaults.years_ahead}">`)}</div>`;
+  $('dlg').showModal();
+  $('dlgOk').onclick=()=>{
+    cfg.site_base_url=$('st_base').value.trim();
+    cfg.defaults.timezone=$('st_tz').value;
+    cfg.defaults.years_ahead=Number($('st_ya').value)||2;
+    closeDlg(); toast('设置已记录,保存到 GitHub 后生效');
+  };
+}
+function openGh(){
+  $('dlgTitle').textContent='🔑 GitHub 提交设置';
+  $('dlgBody').innerHTML=`
+    <div class="grid">
+      ${fld('Owner',`<input id="gh_o" value="${esc(gh.owner)}" placeholder="你的用户名">`)}
+      ${fld('Repo',`<input id="gh_r" value="${esc(gh.repo)}" placeholder="仓库名">`)}
+      ${fld('分支',`<input id="gh_b" value="${esc(gh.branch)}" placeholder="main">`)}</div>
+    ${fld('Personal Access Token(Fine-grained,仅授予此仓库 Contents 读写)',`<input id="gh_p" type="password" value="${esc(gh.pat)}" autocomplete="off" placeholder="github_pat_…">`)}
+    <p style="margin:10px 0 0"><span class="chip ${gh.remember?'on':''}" id="gh_rem">在本机记住 Token(localStorage)</span></p>
+    <p class="hint" style="margin-top:10px">Token 只保存在你自己的浏览器里,不会进入仓库与部署产物。<br>
+    生成入口:GitHub → Settings → Developer settings → Fine-grained personal access tokens。</p>`;
+  $('dlg').showModal();
+  $('gh_rem').onclick=()=>$('gh_rem').classList.toggle('on');
+  $('dlgOk').onclick=()=>{
+    gh.owner=$('gh_o').value.trim(); gh.repo=$('gh_r').value.trim();
+    gh.branch=$('gh_b').value.trim()||'main'; gh.pat=$('gh_p').value.trim();
+    gh.remember=$('gh_rem').classList.contains('on');
+    if(gh.remember&&gh.pat)localStorage.setItem('ics_pat',gh.pat);
+    if(!gh.remember)localStorage.removeItem('ics_pat');
+    closeDlg(); toast('GitHub 设置已记录');
+  };
+}
+function logLine(s){ const l=$('log'); l.style.display='block'; l.textContent+=s+'\n'; l.scrollTop=l.scrollHeight; }
+
+/* ---------- 保存到 GitHub ---------- */
+async function ghApi(method, path, bodyObj){
+  const res = await fetch(`https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/${path}${method==='GET'?(gh.branch?`?ref=${gh.branch}`:''):''}`,{
+    method,
+    headers:{ 'Authorization':'Bearer '+gh.pat, 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28',
+              ...(bodyObj?{'Content-Type':'application/json'}:{}) },
+    body: bodyObj?JSON.stringify(bodyObj):undefined,
+  });
+  const j = await res.json().catch(()=>({}));
+  return { status:res.status, ok:res.ok, j };
+}
+function b64utf8(str){
+  const bytes=new TextEncoder().encode(str);
+  let bin=''; const CH=0x8000;
+  for(let i=0;i<bytes.length;i+=CH) bin+=String.fromCharCode(...bytes.subarray(i,i+CH));
+  return btoa(bin);
+}
+async function saveToGithub(){
+  const nameEl=$('calName'),descEl=$('calDesc');
+  if(nameEl)cfg.calendars[active].name=nameEl.value.trim()||cfg.calendars[active].name;
+  if(descEl)cfg.calendars[active].description=descEl.value.trim()||undefined;
+
+  if(!gh.owner||!gh.repo){ openGh(); toast('先填写仓库信息与 Token',true); return; }
+  if(!gh.pat){ openGh(); toast('需要 GitHub Token 才能提交',true); return; }
+
+  const btn=$('saveBtn'); btn.disabled=true; btn.textContent='⏳ 提交中…';
+  try{
+    logLine(`[${now()}] 获取远端 calendars.yaml 的 sha …`);
+    const get=await ghApi('GET','calendars.yaml');
+    if(!get.ok){ throw new Error(`读取失败 HTTP ${get.status}:${get.j.message??''}(检查 Owner/Repo/分支/Token 权限)`); }
+    logLine(`[${now()}] 提交新配置(${JSON.stringify(cfg).length} 字节)…`);
+    const put=await ghApi('PUT','calendars.yaml',{
+      message:`chore(calendars): update via web editor @ ${new Date().toISOString()}`,
+      content:b64utf8(dumpYaml(cfg)),
+      sha:get.j.sha,
+      branch:gh.branch,
+    });
+    if(!put.ok){ throw new Error(`提交失败 HTTP ${put.status}:${put.j.message??''}`); }
+    logLine(`[${now()}] ✅ 已提交,commit ${put.j.commit?.sha?.slice(0,7)??''}`);
+    logLine(`[${now()}] ⏳ GitHub Actions 正在重建发布,通常 1~2 分钟后刷新订阅即可看到。`);
+    logLine(`       进度:https://github.com/${gh.owner}/${gh.repo}/actions`);
+    toast('✅ 已提交到 GitHub,CI 构建中(约 1 分钟)');
+  }catch(e){
+    logLine(`[${now()}] ❌ ${e.message}`);
+    toast('提交失败:'+e.message,true);
+  }finally{
+    btn.disabled=false; btn.textContent='🚀 保存到 GitHub';
+  }
+}
+function now(){ return new Date().toLocaleTimeString('zh-CN',{hour12:false}); }
+
+/* ---------- 启动 ---------- */
+(async function init(){
+  await gate();
+  await load();
+})();
+</script>
+</body>
+</html>

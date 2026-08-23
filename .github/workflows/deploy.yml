@@ -1,0 +1,53 @@
+name: Build & Deploy Calendars
+
+# 每天自动重建:国务院新公告 → holiday-cn 更新 → 订阅端自动跟进
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 1 * * *' # UTC 01:00 = 北京时间 09:00
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # 版本读自 package.json 的 packageManager 字段
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch latest holiday data
+        run: pnpm cal:fetch
+
+      - name: Build .ics calendars
+        run: pnpm cal:build
+
+      - name: Verify generated calendars
+        run: pnpm cal:verify
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
