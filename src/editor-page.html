@@ -116,6 +116,8 @@
 </dialog>
 <div id="toast"></div>
 
+<!-- 构建期生成:与 Node 端完全一致的 YAML 序列化器(全局 const dumpYaml) -->
+<script src="./yaml-dump.js"></script>
 <script>
 'use strict';
 const TYPES = {
@@ -135,9 +137,6 @@ let cfg = null, metaTime = '';
 let active = 0, editState = null, editSnapshot = null;
 let auth = { enabled:false, sha256:'', hint:'' };
 let gh = { owner:'', repo:'', branch:'main', pat:'', remember:false };
-
-// 构建时由 generate.ts 注入与 Node 端完全一致的 YAML 序列化函数:
-const dumpYaml = /*__INLINE_YAML_DUMP__*/null;
 
 const $ = (id)=>document.getElementById(id);
 const esc = (s)=>String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

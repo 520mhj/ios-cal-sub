@@ -200,14 +200,28 @@ console.log('\n━━ 6. 在线编辑器产物(Pages /editor/)━━');
     fail(`data.json 检查失败:${(e as Error).message}`);
   }
 
-  if (fs.existsSync(edIndex) && fs.readFileSync(edIndex, 'utf8').includes('在线编辑器'))
-    pass('editor/index.html 已生成且注入了页面主体');
-  else fail('editor/index.html 缺失或内容异常');
+  if (fs.existsSync(edIndex) && fs.readFileSync(edIndex, 'utf8').includes('yaml-dump.js'))
+    pass('editor/index.html 已生成并引用 yaml-dump.js');
+  else fail('editor/index.html 缺失或未引用序列化脚本');
 
-  if (fs.existsSync(edIndex)) {
-    const html = fs.readFileSync(edIndex, 'utf8');
-    if (/const dumpYaml\s*=\s*function/.test(html)) pass('编辑器已内嵌 YAML 序列化函数(保存链路可用)');
-    else fail('编辑器未注入 dumpYaml 函数');
+  // 关键:浏览器版序列化器必须「可独立执行」且与 Node 端输出逐字符一致
+  // (回归防护:此前 tsx keepNames 注入的 __name 曾导致浏览器端 ReferenceError)
+  try {
+    const src = fs.readFileSync(path.join(distDir, 'editor', 'yaml-dump.js'), 'utf8');
+    const browserDumpYaml = new Function(src + '\nreturn dumpYaml;')() as typeof dumpYaml;
+    const sample = { s: '含,逗号"引号"\n换行', arr: [1, true, '处暑'], o: { k: '' } };
+    if (browserDumpYaml(sample) === dumpYaml(sample))
+      pass('内嵌序列化器可独立执行,特殊字符输出与 Node 端一致');
+    else fail('内嵌 dumpYaml 输出与 Node 端不一致');
+
+    if (dataObj) {
+      const backFromBrowser = parseYaml(browserDumpYaml(dataObj.config));
+      if (JSON.stringify(backFromBrowser) === JSON.stringify(dataObj.config))
+        pass('浏览器版 dumpYaml 对完整配置往返无损');
+      else fail('浏览器版 dumpYaml 完整配置往返有差异');
+    }
+  } catch (e) {
+    fail(`执行内嵌序列化器失败:${(e as Error).message}`);
   }
 
   try {

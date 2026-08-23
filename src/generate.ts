@@ -225,7 +225,8 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
   );
 
   // 在线编辑器产物:data.json 写「未解析」的原始配置(不把密钥哈希发布到公开产物);
-  // editor/auth.json 用解析后的生效值(环境变量优先)。
+  // editor/auth.json 用解析后的生效值(环境变量优先);
+  // yaml-dump.js 为独立脚本(带 esbuild keepNames 兼容垫片),index.html 通过 <script src> 引入。
   const edDir = path.join(outDir, 'editor');
   await fs.promises.mkdir(edDir, { recursive: true });
   await fs.promises.writeFile(
@@ -242,13 +243,16 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
     }),
     'utf8',
   );
-  const tpl = await fs.promises.readFile(path.join(HERE, 'editor-page.html'), 'utf8');
-  // 注入与 Node 端完全一致的 YAML 序列化函数(运行时编译后的源码)
-  const page = tpl.replace(
-    '/*__INLINE_YAML_DUMP__*/null',
-    () => dumpYaml.toString(),
+  await fs.promises.writeFile(
+    path.join(edDir, 'yaml-dump.js'),
+    '// 自动生成于构建期:与 Node 端完全一致的 YAML 序列化器(勿手改)\n' +
+      'const __name = (fn) => fn; // 兼容 tsx/esbuild keepNames 注入的名称保留辅助\n' +
+      dumpYaml.toString() +
+      '\n',
+    'utf8',
   );
-  await fs.promises.writeFile(path.join(edDir, 'index.html'), page, 'utf8');
+  const tpl = await fs.promises.readFile(path.join(HERE, 'editor-page.html'), 'utf8');
+  await fs.promises.writeFile(path.join(edDir, 'index.html'), tpl, 'utf8');
 
   if (opts.log !== false) {
     console.log(`\n🎉 完成:${cfg.calendars.length} 个日历 → ${path.basename(outDir)}(含 index.html、manifest.json、editor/)`);
