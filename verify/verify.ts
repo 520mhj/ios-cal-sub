@@ -1,19 +1,22 @@
 /**
- * 验证 dist/ 下生成的日历:
- *  1. 物理格式:CRLF、行 ≤75 八字节、VCALENDAR 配对、UID 唯一
- *  2. 第三方回读:ts-ics convertIcsCalendar 能完整解析且事件数与 manifest 一致
- *  3. 数据抽查:
- *     - 缓存数据里每个调休补班日都在 cn-holidays 中有对应事件
- *     - 农历换算已知事实校验(2000 年八月十五 = 2000-09-12)
- *     - family-days 含配置中的农历生日(2026 八月十五 → 2026-09-25)
- *     - monthly 规则事件数量与独立推算一致;定时事件带正确 TZID
+ * 验证 dist/ 下生成的日历 —— 全部断言均为「内容无关」:
+ * 用户任意修改 calendars.yaml 的标题/时间/天数都不应导致验证失败。
+ *  1. 物理格式:CRLF、行 ≤75 八字节、UID 唯一、事件数与 manifest 一致
+ *  2. 节假日:缓存数据里每个条目(含调休补班)都有对应事件(动态读取,无硬编码)
+ *  3. 纯函数已知事实:农历换算 / 节气天文计算与公开资料一致
+ *  4. 配置 ↔ 产物全量比对:用生成器同款展开逻辑推导期望事件集,
+ *     以确定性 UID 逐条核对 dist 内容(缺失/多余都会报出),
+ *     并精确校验定时事件的 TZID 时间与 VALARM 总数
+ *  5. index.html 链接完整性
+ *  6. 在线编辑器产物:data.json 校验、yaml-dump.js 可独立执行且输出一致、auth.json 门禁状态
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { convertIcsCalendar } from 'ts-ics';
 import { parse as parseYaml } from 'yaml';
-import { lunarToSolar, solarTermDatesInRange } from '../src/sources.js';
+import { lunarToSolar, solarTermDatesInRange, expandSource, loadHolidayData } from '../src/sources.js';
 import { configSchema } from '../src/types.js';
+import type { Occurrence } from '../src/types.js';
 import { dumpYaml } from '../src/yaml-dump.js';
 import { resolveConfig } from '../src/generate.js';
 
@@ -77,7 +80,7 @@ for (const cal of manifest.calendars) {
   parsed.set(cal.id, { raw, events });
 }
 
-console.log('\n━━ 2. 调休补班日抽查(Apple 日历缺失的关键)━━');
+console.log('\n━━ 2. 节假日条目全覆盖(含调休补班,动态读取缓存)━━');
 {
   const cal = parsed.get('cn-holidays');
   if (!cal) {
@@ -93,80 +96,101 @@ console.log('\n━━ 2. 调休补班日抽查(Apple 日历缺失的关键)━�
       for (const day of j.days ?? []) {
         if (!inWin(day.date)) continue;
         const compact = day.date.replace(/-/g, '');
-        const hit = cal.events.some(
-          (e) =>
-            JSON.stringify(e.start ?? {}).includes(compact) ||
-            cal.raw.includes(`DTSTART;VALUE=DATE:${compact}`),
-        );
-        // 更精确:按 UID 前缀对应的日期逐条比对
         const exact = cal.raw.includes(`DTSTART;VALUE=DATE:${compact}`);
-        void hit;
         if (!exact) {
           missing++;
-          fail(`补班日 ${day.date}(${day.name})未出现在 cn-holidays.ics`);
+          fail(`${day.isOffDay ? '休息日' : '补班日'} ${day.date}(${day.name})未出现在 cn-holidays.ics`);
         }
         checked++;
       }
     }
-    if (missing === 0) pass(`窗口内全部 ${checked} 个节假日条目(含补班)均有对应事件`);
+    if (missing === 0) pass(`窗口内全部 ${checked} 个节假日条目均有对应事件`);
   }
 }
 
-console.log('\n━━ 3. 农历换算抽查 ━━');
+console.log('\n━━ 3. 天文换算已知事实抽查 ━━');
 {
-  const known: [number, number, number, string][] = [
+  const lunarKnown: [number, number, number, string][] = [
     [2000, 8, 15, '2000-09-12'], // 2000 年中秋节
     [2026, 8, 15, '2026-09-25'], // 2026 年中秋节
     [2025, 1, 1, '2025-01-29'], // 2025 春节(正月初一)
   ];
-  for (const [y, m, d, expect] of known) {
+  for (const [y, m, d, expect] of lunarKnown) {
     const got = lunarToSolar(y, m, d);
     if (got !== expect) fail(`农历 ${y}-${m}-${d} 应为公历 ${expect},得到 ${got}`);
     else pass(`农历 ${y} 年 ${m} 月 ${d} 日 → 公历 ${got} ✓`);
   }
 
-  const fam = parsed.get('family-days');
-  if (fam) {
-    const okDate = fam.raw.includes('DTSTART;VALUE=DATE:20260925') && fam.events.some((e) => (e.summary ?? '').includes('妈妈·生日'));
-    if (okDate) pass('family-days 含 2026-09-25「妈妈·生日」(农历八月十五)');
-    else fail('family-days 缺少预期的农历生日事件');
-
-    // 虚岁检查:1965 年生 → 农历 2026 年虚岁 62
-    const descHit = [...fam.raw.matchAll(/DESCRIPTION:(.+)/g)].some((m) => m[1]!.includes('虚岁 62'));
-    if (descHit) pass('虚岁计算正确(2026 农历年 − 1965 + 1 = 62)');
-    else fail('未找到虚岁 62 的描述');
+  const termKnown: [string, string, string][] = [
+    ['处暑', '2024', '2024-08-22'],
+    ['处暑', '2025', '2025-08-23'],
+    ['冬至', '2026', '2026-12-22'],
+  ];
+  for (const [term, year, expect] of termKnown) {
+    const table = solarTermDatesInRange({ start: `${year}-01-01`, end: `${year}-12-31` });
+    const hits = (table.get(term) ?? []).filter((d) => d.startsWith(year));
+    if (hits.includes(expect)) pass(`${term} ${year} = ${expect} ✓(与公开资料一致)`);
+    else fail(`${term} ${year} 计算异常:${hits.join(',') || '(空)'}`);
   }
 }
 
-console.log('\n━━ 4. 周期规则与定时事件抽查 ━━');
+console.log('\n━━ 4. 配置 ↔ 产物全量一致性 ━━');
 {
-  const rec = parsed.get('recurring');
-  if (!rec) {
-    console.log('   (跳过:未生成 recurring)');
+  const dataObj = JSON.parse(fs.readFileSync(path.join(distDir, 'data.json'), 'utf8')) as { config: unknown };
+  const cfgParsed = configSchema.safeParse(dataObj.config);
+  if (!cfgParsed.success) {
+    fail(`data.json 配置不符合 schema:${cfgParsed.error.issues[0]!.path.join('.')}`);
   } else {
-    // 每月还款:窗口内每个月都应有一条
-    const repayCount = rec.events.filter((e) => (e.summary ?? '').includes('信用卡还款日')).length;
+    const cfg = cfgParsed.data;
     const win = manifest.window;
-    const startY = Number(win.start.slice(0, 4));
-    const startM = Number(win.start.slice(5, 7));
-    const endY = Number(win.end.slice(0, 4));
-    const endM = Number(win.end.slice(5, 7));
-    const expectMonths = (endY - startY) * 12 + (endM - startM) + 1; // 窗口起点早于每月 25 号时成立
-    if (repayCount === expectMonths)
-      pass(`monthly 还款事件数量正确(${repayCount} = 窗口内 ${expectMonths} 个月)`);
-    else if (Math.abs(repayCount - expectMonths) <= 1)
-      pass(`monthly 还款事件数量合理(${repayCount} ≈ 窗口 ${expectMonths} 月,边界月差异属预期)`);
-    else fail(`monthly 还款事件数量异常:${repayCount},期望约 ${expectMonths}`);
+    const holidayData = await loadHolidayData(path.resolve('data/holiday-cn'), win);
 
-    // 定时事件必须带 TZID 且时间正确
-    const timedOk = /DTSTART;TZID=Asia\/Shanghai:\d{8}T193000/.test(rec.raw);
-    if (timedOk) pass('定时事件 DTSTART 带 TZID=Asia/Shanghai 且时间 19:30 正确');
-    else fail('未找到 19:30 的 TZID 定时事件');
+    for (const cal of cfg.calendars) {
+      const entry = parsed.get(cal.id);
+      console.log(`\n▶ ${cal.id}.ics`);
+      if (!entry) {
+        fail('dist 中找不到该日历(构建遗漏?)');
+        continue;
+      }
+      let expected: Occurrence[] = [];
+      try {
+        expected = cal.sources.flatMap((s) =>
+          expandSource(s, { win, calId: cal.id, holidayData }),
+        );
+      } catch (e) {
+        fail(`展开配置时出错:${(e as Error).message}`);
+        continue;
+      }
 
-    // VALARM 存在性
-    const alarmCount = (rec.raw.match(/BEGIN:VALARM/g) ?? []).length;
-    if (alarmCount >= repayCount * 2) pass(`提醒数量充足(${alarmCount} 个 VALARM)`);
-    else fail(`VALARM 数量偏少:${alarmCount}`);
+      // UID 集合双向比对
+      const actualUids = new Set(entry.events.map((e) => e.uid));
+      const expectedUids = new Set(expected.map((o) => o.uid));
+      const missing = [...expectedUids].filter((u) => !actualUids.has(u));
+      const extra = [...actualUids].filter((u) => !expectedUids.has(u));
+      if (missing.length === 0 && extra.length === 0)
+        pass(`事件集合与配置完全一致(${expected.length} 条,UID 逐条匹配)`);
+      else {
+        if (missing.length) fail(`缺少 ${missing.length} 条期望事件,如:${missing.slice(0, 3).join(', ')}`);
+        if (extra.length) fail(`多出 ${extra.length} 条意外事件,如:${extra.slice(0, 3).join(', ')}`);
+      }
+
+      // 定时事件:抽前 2 条核对 TZID 与时刻
+      const timed = expected.filter((o) => o.time);
+      const tzEsc = cfg.defaults.timezone.replace('/', '\\/');
+      for (const o of timed.slice(0, 2)) {
+        const line = `DTSTART;TZID=${cfg.defaults.timezone}:${o.start.replace(/-/g, '')}T${o.time!.replace(':', '')}00`;
+        if (!entry.raw.includes(line))
+          fail(`定时事件时刻不符:期望存在 ${line}`);
+      }
+      if (timed.length > 0)
+        pass(`定时事件时刻/TZID 正确(抽查 ${Math.min(2, timed.length)}/${timed.length} 条)`);
+
+      // 提醒总数精确相等
+      const wantAlarms = expected.reduce((n, o) => n + o.alarms.length, 0);
+      const gotAlarms = (entry.raw.match(/BEGIN:VALARM/g) ?? []).length;
+      if (gotAlarms === wantAlarms) pass(`提醒数量精确一致(${wantAlarms} 个 VALARM)`);
+      else fail(`提醒数量不符:文件 ${gotAlarms},配置推导应为 ${wantAlarms}`);
+    }
   }
 }
 
@@ -191,7 +215,7 @@ console.log('\n━━ 6. 在线编辑器产物(Pages /editor/)━━');
     if (re.success) pass('data.json 结构化配置可被 zod schema 完整校验');
     else fail(`data.json 配置不符合 schema:${re.error.issues[0]!.path.join('.')} ${re.error.issues[0]!.message}`);
 
-    // YAML 序列化往返一致性(浏览器提交的内容必须能被 Node 端原样读回)
+    // Node 端 dumpYaml 往返无损
     const yamlText = dumpYaml(re.success ? re.data : dataObj!.config);
     const reparsed = parseYaml(yamlText);
     if (JSON.stringify(reparsed) === JSON.stringify(dataObj!.config)) pass('dumpYaml 往返无损(YAML → 对象逐字段一致)');
@@ -235,49 +259,6 @@ console.log('\n━━ 6. 在线编辑器产物(Pages /editor/)━━');
     else fail('auth.json 与解析后的 editor_auth 不一致');
   } catch (e) {
     fail(`auth.json 检查失败:${(e as Error).message}`);
-  }
-}
-
-console.log('\n━━ 6. 节气事件抽查 ━━');
-{
-  // 已知公开事实:2025 处暑 = 08-23,2024 处暑 = 08-22,2026 冬至 = 12-22
-  const table25 = solarTermDatesInRange({ start: '2025-08-01', end: '2025-08-31' });
-  const chushu25 = (table25.get('处暑') ?? []).filter((d) => d.startsWith('2025'));
-  if (chushu25.includes('2025-08-23')) pass('处暑 2025 = 2025-08-23 ✓(与公开资料一致)');
-  else fail(`处暑 2025 计算异常:${chushu25.join(',') || '(空)'}`);
-
-  const table24 = solarTermDatesInRange({ start: '2024-08-01', end: '2024-08-31' });
-  const chushu24 = (table24.get('处暑') ?? []).filter((d) => d.startsWith('2024'));
-  if (chushu24.includes('2024-08-22')) pass('处暑 2024 = 2024-08-22 ✓(与公开资料一致)');
-  else fail(`处暑 2024 计算异常:${chushu24.join(',') || '(空)'}`);
-
-  const table26 = solarTermDatesInRange({ start: '2026-12-01', end: '2026-12-31' });
-  const dongzhi26 = (table26.get('冬至') ?? []).filter((d) => d.startsWith('2026'));
-  if (dongzhi26.includes('2026-12-22')) pass('冬至 2026 = 2026-12-22 ✓(与公开资料一致)');
-  else fail(`冬至 2026 计算异常:${dongzhi26.join(',') || '(空)'}`);
-
-  // dist 内容:节气日历应含"前一天预告"与"连续打卡"两类事件
-  const jq = parsed.get('jieqi-notes');
-  if (jq) {
-    const winStart = manifest.window.start;
-    const advance = jq.events.filter((e) => (e.summary ?? '').includes('明天处暑')).length;
-    const streak = jq.events.filter((e) => (e.summary ?? '').includes('处暑晨跑')).length;
-    if (advance >= 1) pass(`「明天处暑·前一天预告」事件已生成 ${advance} 条`);
-    else fail('缺少「明天处暑」前一天预告事件');
-
-    if (streak >= 2) {
-      pass(`「处暑晨跑·连续打卡」已展开 ${streak} 天`);
-      const timedOk = /DTSTART;TZID=Asia\/Shanghai:\d{8}T064000/.test(jq.raw);
-      if (timedOk) pass('连续打卡为每日 06:40 定时事件(TZID 正确)');
-      else fail('连续打卡未找到 06:40 的定时 DTSTART');
-    } else fail(`处暑晨跑展开天数不足:${streak}`);
-
-    // 前一天预告应为当晚 20:30 定时事件
-    const prevDayTimed = /DTSTART;TZID=Asia\/Shanghai:\d{8}T203000/.test(jq.raw);
-    if (prevDayTimed) pass('「明天处暑」预告为前一天 20:30 定时事件');
-    else fail('「明天处暑」预告未找到 20:30 定时 DTSTART');
-  } else {
-    console.log('   (未找到 jieqi-notes 日历,跳过 dist 抽查)');
   }
 }
 
