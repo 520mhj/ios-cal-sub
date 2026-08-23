@@ -211,7 +211,7 @@ function renderCal() {
       </div>
     </div>`;
   $('calName').onchange = (e) => { cfg.calendars[active].name = e.target.value.trim() || c.name; renderTabs(); };
-  $('calDesc').onchange = (e) => { cfg.calendars[active].description = e.target.value.trim() || undefined; };
+  $('calDesc').onchange = (e) => { const d = e.target.value.trim(); if (d) cfg.calendars[active].description = d; else delete cfg.calendars[active].description; };
   $('delCalBtn').onclick = () => {
     if (!confirm(`确定删除日历「${c.name}」及其全部 ${c.sources.length} 个事件?`)) return;
     cfg.calendars.splice(active, 1);

@@ -39,7 +39,10 @@ export function dumpYaml(value: unknown, indent = 0): string {
   }
 
   if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value as Record<string, unknown>);
+    const entries = Object.entries(value as Record<string, unknown>)
+      // 跳过空值键:undefined/null 在配置语义里等于"未设置",
+      // 输出成 `key: null` 会撞上 zod 的 optional 校验(expected string, received null)
+      .filter(([, v]) => v !== undefined && v !== null);
     if (entries.length === 0) return `${pad}{}`;
     return entries
       .map(([k, v]) => {
@@ -52,4 +55,22 @@ export function dumpYaml(value: unknown, indent = 0): string {
   }
 
   return String(value);
+}
+
+/**
+ * 深度清除对象树里的 null 值键(改为删除该键)。
+ * 用于配置入口的统一清洗:让历史上已被写成 `key: null` 的 YAML 自愈,
+ * 通过 zod 的 optional 校验。数组内的 null 保留原样(配置中不存在此形态)。
+ */
+export function stripNullValues<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((v) => stripNullValues(v)) as unknown as T;
+  if (typeof value === 'object' && value !== null) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === null) continue;
+      out[k] = stripNullValues(v);
+    }
+    return out as unknown as T;
+  }
+  return value;
 }

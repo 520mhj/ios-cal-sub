@@ -265,7 +265,7 @@ function renderCal(){
       <div style="margin-top:12px"><button class="btn" id="addEvBtn">＋ 添加事件</button></div>
     </div>`;
   $('calName').onchange=e=>{cfg.calendars[active].name=e.target.value.trim()||c.name;renderTabs();};
-  $('calDesc').onchange=e=>{cfg.calendars[active].description=e.target.value.trim()||undefined;};
+  $('calDesc').onchange=e=>{const d=e.target.value.trim();if(d)cfg.calendars[active].description=d;else delete cfg.calendars[active].description;};
   $('delCalBtn').onclick=()=>{ if(!confirm(`确定删除「${c.name}」及其 ${c.sources.length} 个事件?`))return;
     cfg.calendars.splice(active,1); active=Math.max(0,active-1); render(); };
   $('addEvBtn').onclick=()=>openEventForm(active,-1);

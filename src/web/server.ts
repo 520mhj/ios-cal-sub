@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { configSchema } from '../types.js';
 import { buildCalendars } from '../generate.js';
+import { stripNullValues } from '../yaml-dump.js';
 
 const PORT = Number(process.env.PORT ?? 5188);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -54,7 +55,7 @@ async function handleSave(body: unknown): Promise<
   | { ok: true; summary: Awaited<ReturnType<typeof buildCalendars>>['rows'] }
   | { ok: false; issues: { path: string; message: string }[] }
 > {
-  const parsed = configSchema.safeParse(body);
+  const parsed = configSchema.safeParse(stripNullValues(body));
   if (!parsed.success) {
     return {
       ok: false,

@@ -17,7 +17,7 @@ import { parse as parseYaml } from 'yaml';
 import { lunarToSolar, solarTermDatesInRange, expandSource, loadHolidayData } from '../src/sources.js';
 import { configSchema } from '../src/types.js';
 import type { Occurrence } from '../src/types.js';
-import { dumpYaml } from '../src/yaml-dump.js';
+import { dumpYaml, stripNullValues } from '../src/yaml-dump.js';
 import { resolveConfig } from '../src/generate.js';
 
 let failures = 0;
@@ -211,7 +211,8 @@ console.log('\n━━ 6. 在线编辑器产物(Pages /editor/)━━');
   let dataObj: { config: unknown } | null = null;
   try {
     dataObj = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-    const re = configSchema.safeParse(dataObj!.config);
+    // 与构建入口一致:data.json 的配置同样先清洗历史 null 再过 schema
+    const re = configSchema.safeParse(stripNullValues(dataObj!.config));
     if (re.success) pass('data.json 结构化配置可被 zod schema 完整校验');
     else fail(`data.json 配置不符合 schema:${re.error.issues[0]!.path.join('.')} ${re.error.issues[0]!.message}`);
 
@@ -251,7 +252,7 @@ console.log('\n━━ 6. 在线编辑器产物(Pages /editor/)━━');
   try {
     const authInfo = JSON.parse(fs.readFileSync(edAuth, 'utf8')) as { enabled: boolean; sha256: string; hint?: string };
     // 与「解析后」的配置比对(环境变量优先,yaml 兜底)——和构建时同一套逻辑
-    const rawCfg = configSchema.parse(parseYaml(fs.readFileSync(path.resolve('calendars.yaml'), 'utf8')));
+    const rawCfg = configSchema.parse(stripNullValues(parseYaml(fs.readFileSync(path.resolve('calendars.yaml'), 'utf8'))));
     const eff = resolveConfig(rawCfg);
     const wantEnabled = !!eff.editor_auth?.key_sha256;
     if (authInfo.enabled === wantEnabled && authInfo.sha256 === (eff.editor_auth?.key_sha256 ?? ''))

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { configSchema, type AppConfig, type Occurrence } from './types.js';
 import { buildIcs } from './ics.js';
-import { dumpYaml } from './yaml-dump.js';
+import { dumpYaml, stripNullValues } from './yaml-dump.js';
 import {
   buildWindow,
   expandSource,
@@ -44,7 +44,7 @@ export function loadConfig(cfgPath: string): AppConfig {
     console.error(`❌ YAML 解析失败(${cfgPath}): ${(e as Error).message}`);
     process.exit(2);
   }
-  const parsed = configSchema.safeParse(raw);
+  const parsed = configSchema.safeParse(stripNullValues(raw));
   if (!parsed.success) {
     console.error('❌ 配置校验失败:');
     for (const issue of parsed.error.issues) {
