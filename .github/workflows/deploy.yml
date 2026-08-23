@@ -34,6 +34,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 诊断:确认 Variables/Secrets 是否真的到达了构建环境
+      # (Secret 的值会被 GitHub 自动打码为 ***,只看是否为 SET)
+      - name: Diagnose config injection
+        run: |
+          echo "CAL_SITE_BASE_URL     = [${{ vars.CAL_SITE_BASE_URL }}]"
+          if [ -n "${{ secrets.CAL_EDITOR_KEY_SHA256 }}" ]; then
+            echo "CAL_EDITOR_KEY_SHA256 = [SET]"
+          else
+            echo "CAL_EDITOR_KEY_SHA256 = [(empty)]"
+          fi
+          echo "CAL_EDITOR_HINT       = [${{ vars.CAL_EDITOR_HINT }}]"
+
       - uses: pnpm/action-setup@v4 # 版本读自 package.json 的 packageManager 字段
 
       - uses: actions/setup-node@v4

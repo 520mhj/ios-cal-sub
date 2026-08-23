@@ -252,6 +252,9 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
 
   if (opts.log !== false) {
     console.log(`\n🎉 完成:${cfg.calendars.length} 个日历 → ${path.basename(outDir)}(含 index.html、manifest.json、editor/)`);
+    console.log(
+      `🔗 生效配置 → 站点地址: ${eff.site_base_url || '(空,订阅按钮将置灰)'} | 编辑器门禁: ${eff.editor_auth?.key_sha256 ? '开启' : '关闭'}`,
+    );
   }
   return { window: win, rows: summaryRows };
 }
