@@ -3,6 +3,8 @@
 自己动手,补齐 Apple 日历的缺失:一套**配置驱动**的静态 `.ics` 日历生成器,
 部署到任意静态托管(GitHub Pages / 对象存储)后,iPhone 用系统日历直接订阅 URL,零服务器成本。
 
+> 📚 踩坑结论与设计规约见 [docs/KNOWLEDGE-BASE.md](docs/KNOWLEDGE-BASE.md)(排障后请随手更新)。
+
 ## 解决什么问题
 
 | 痛点 | 本工具的方案 |
