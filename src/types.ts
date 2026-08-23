@@ -93,9 +93,9 @@ export const solarTermSource = z.object({
   /** 节气名,如 处暑 / 冬至 */
   term: z.enum(SOLAR_TERM_NAMES),
   /** 相对节气日的偏移天数:-1 = 前一天,默认 0(当天) */
-  offset_days: z.number().int().min(-30).max(30).default(0),
-  /** 从偏移日起连续展开几天,每天一条事件便于逐日提醒;默认 1 */
-  days: z.number().int().min(1).max(15).default(1),
+  offset_days: z.number().int().min(-183).max(183).default(0),
+  /** 从偏移日起连续展开几天,每天一条事件便于逐日提醒;默认 1(上限一整年) */
+  days: z.number().int().min(1).max(366).default(1),
 });
 
 export const sourceSchema = z.discriminatedUnion('type', [

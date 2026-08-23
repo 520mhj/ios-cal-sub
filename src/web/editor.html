@@ -321,14 +321,14 @@ const FORMS = {
   'solar-term'(s) {
     return `<div class="grid">
       ${fld('节气', `<select id="f_term">${TERMS.map(t=>`<option ${s.term===t?'selected':''}>${t}</option>`).join('')}</select>`)}
-      ${fld('相对节气偏移天数(前一天=-1)', `<input id="f_off" type="number" min="-30" max="30" value="${s.offset_days ?? 0}">`)}
-      ${fld('连续展开天数(每天一条事件)', `<input id="f_days" type="number" min="1" max="15" value="${s.days ?? 1}">`)}
+      ${fld('相对节气偏移天数(前一天=-1,最多±183)', `<input id="f_off" type="number" min="-183" max="183" value="${s.offset_days ?? 0}">`)}
+      ${fld('连续展开天数(1~366,每天一条事件)', `<input id="f_days" type="number" min="1" max="366" value="${s.days ?? 1}">`)}
     </div>`;
   },
   'read-solar-term'(s) {
     s.term = $('f_term').value;
-    s.offset_days = Number($('f_off').value);
-    s.days = Number($('f_days').value) || 1;
+    const off = Number($('f_off').value); s.offset_days = Math.max(-183, Math.min(183, Number.isFinite(off) ? Math.trunc(off) : 0));
+    const d = Number($('f_days').value); s.days = Math.max(1, Math.min(366, Number.isFinite(d) ? Math.trunc(d) : 1));
   },
   'holidays-cn'(s) {
     return `<div class="hint" style="margin-bottom:10px">节假日数据源每个日历最多一个。勾选要生成的事件类别:</div>

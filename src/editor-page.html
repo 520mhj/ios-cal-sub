@@ -326,9 +326,13 @@ const FORMS={
     if(en)s.end=en;else delete s.end;},
   'solar-term'(s){return `<div class="grid">
     ${fld('节气',`<select id="f_term">${TERMS.map(t=>`<option ${s.term===t?'selected':''}>${t}</option>`).join('')}</select>`)}
-    ${fld('偏移天数(前一天=-1)',`<input id="f_off" type="number" min="-30" max="30" value="${s.offset_days??0}">`)}
-    ${fld('连续展开天数',`<input id="f_days" type="number" min="1" max="15" value="${s.days??1}">`)}</div>`;},
-  'read-solar-term'(s){s.term=$('f_term').value;s.offset_days=Number($('f_off').value);s.days=Number($('f_days').value)||1;},
+    ${fld('偏移天数(前一天=-1,最多±183)',`<input id="f_off" type="number" min="-183" max="183" value="${s.offset_days??0}">`)}
+    ${fld('连续展开天数(1~366)',`<input id="f_days" type="number" min="1" max="366" value="${s.days??1}">`)}</div>`;},
+  'read-solar-term'(s){
+    s.term=$('f_term').value;
+    const off=Number($('f_off').value); s.offset_days=Math.max(-183,Math.min(183,Number.isFinite(off)?Math.trunc(off):0));
+    const d=Number($('f_days').value); s.days=Math.max(1,Math.min(366,Number.isFinite(d)?Math.trunc(d):1));
+  },
   'holidays-cn'(s){return `<div class="hint" style="margin-bottom:10px">每日历最多一个数据源,勾选要生成的类别:</div>
     <div class="chips"><span class="chip ${s.include_rest_days!==false?'on':''}" id="f_rest">🎉 放假日</span>
     <span class="chip ${!!s.include_workdays?'on':''}" id="f_work">💼 调休补班(Apple 缺失)</span></div>`;},
@@ -456,10 +460,56 @@ function b64utf8(str){
   for(let i=0;i<bytes.length;i+=CH) bin+=String.fromCharCode(...bytes.subarray(i,i+CH));
   return btoa(bin);
 }
+/* 提交前的轻量校验:镜像服务端 zod 的关键约束,把问题拦在浏览器里而不是 CI */
+function validateCfg(){
+  const errs=[];
+  const int=(v,min,max)=>typeof v==='number'&&Number.isInteger(v)&&v>=min&&v<=max;
+  cfg.calendars.forEach((c,ci)=>{
+    const at=(j)=>`日历${ci+1}「${c.name||c.id}」第 ${j+1} 项`;
+    if(!/^[a-z0-9][a-z0-9-]{0,62}$/.test(c.id)) errs.push(`日历 ID 非法:${c.id}`);
+    if(!c.name) errs.push(`日历「${c.id}」缺名称`);
+    c.sources.forEach((s,j)=>{
+      if(s.type!=='holidays-cn' && !(s.title??'').trim()) errs.push(`${at(j)} 缺标题`);
+      if(s.time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(s.time)) errs.push(`${at(j)} 时间须为 HH:mm`);
+      switch(s.type){
+        case 'lunar':
+          if(!int(s.lunar_month,1,12)) errs.push(`${at(j)} 农历月须为 1~12`);
+          if(!int(s.lunar_day,1,30))   errs.push(`${at(j)} 农历日须为 1~30`);
+          break;
+        case 'solar':
+          if(!int(s.month,1,12)) errs.push(`${at(j)} 月份须为 1~12`);
+          if(!int(s.day,1,31))   errs.push(`${at(j)} 日期须为 1~31`);
+          break;
+        case 'rule':
+          if(!['weekly','monthly','yearly','once'].includes(s.freq)) errs.push(`${at(j)} 频率非法`);
+          if(s.freq==='weekly' && !s.weekday) errs.push(`${at(j)} weekly 需选星期几`);
+          if(s.freq==='monthly' && !int(s.day,1,31)) errs.push(`${at(j)} monthly 需填日期(1~31)`);
+          if(s.freq==='yearly' && (!int(s.month,1,12)||!int(s.day,1,31))) errs.push(`${at(j)} yearly 需填月和日`);
+          if(s.freq==='once' && !/^\d{4}-\d{2}-\d{2}$/.test(s.date??'')) errs.push(`${at(j)} once 需填具体日期`);
+          break;
+        case 'solar-term':
+          if(!TERMS.includes(s.term)) errs.push(`${at(j)} 节气名非法`);
+          if(!int(s.offset_days,-183,183)) errs.push(`${at(j)} 偏移天数须为 -183~183 的整数`);
+          if(!int(s.days,1,366)) errs.push(`${at(j)} 连续天数须为 1~366 的整数(当前 ${JSON.stringify(s.days)})`);
+          break;
+      }
+    });
+  });
+  return errs;
+}
+
 async function saveToGithub(){
   const nameEl=$('calName'),descEl=$('calDesc');
   if(nameEl)cfg.calendars[active].name=nameEl.value.trim()||cfg.calendars[active].name;
-  if(descEl)cfg.calendars[active].description=descEl.value.trim()||undefined;
+  if(descEl){const d=descEl.value.trim();if(d)cfg.calendars[active].description=d;else delete cfg.calendars[active].description;}
+
+  // 先校验,不合法就地拦截(避免推到 CI 才失败)
+  const errs=validateCfg();
+  if(errs.length){
+    logLine(`[${now()}] ❌ 配置有 ${errs.length} 处问题,未提交:`);
+    errs.slice(0,8).forEach(e=>logLine('       · '+e));
+    toast(errs[0],true); return;
+  }
 
   if(!gh.owner||!gh.repo){ openGh(); toast('先填写仓库信息与 Token',true); return; }
   if(!gh.pat){ openGh(); toast('需要 GitHub Token 才能提交',true); return; }
