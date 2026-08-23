@@ -34,54 +34,46 @@ calendars:
     description: "二十四节气锚定,支持前一天预告与连续多天打卡"
     sources:
       - type: "solar-term"
-        title: "明天处暑·把凉席收起来换秋被"
-        time: "20:30"
+        title: "明天春分·扳指见龙脊"
+        time: "10:30"
         alarms:
           - "-PT15M"
-        term: "处暑"
+        term: "春分"
         offset_days: -1
-        days: 1
+        days: 90
+        alarm_days_before:
+          - 1
       - type: "solar-term"
-        title: "处暑打虫·趁凉快出门"
+        title: "端午节·凤交颈·36下"
+        time: "10:20"
+        alarms:
+          - "-PT1H"
+        term: "夏至"
+        offset_days: 2
+        days: 90
+        alarm_days_before:
+          - 0
+      - type: "solar-term"
+        title: "处暑打虫·服用菊桂化骨散"
         time: "16:00"
         alarms:
           - "-PT10M"
         term: "处暑"
         offset_days: 0
         days: 5
-      - type: "solar-term"
-        title: "冬至·记得吃饺子"
-        time: "11:00"
-        alarms:
-          - "-PT1H"
-        term: "冬至"
-        offset_days: 0
-        days: 1
-      - type: "solar-term"
-        title: "明天立秋·买菜备菜贴秋膘"
-        time: "19:00"
-        term: "立秋"
-        offset_days: -1
-        days: 1
-      - type: "solar-term"
-        title: "白露已至·早晚记得添衣"
         alarm_days_before:
-          - 0
-        term: "白露"
-        offset_days: 0
-        days: 3
+          - 1
   - id: "recurring"
     name: "⏰ 固定循环事项"
     sources:
       - type: "rule"
         title: "每月必做"
+        note: "爸爸200花费、两个手机卡各50、家里电费各100"
         time: "19:40"
         alarms:
           - "-P1D"
           - "-PT1H"
-        freq: "monthly"
-        note: "爸爸200花费、两个手机卡各50、家里电费各100"
         alarm_days_before:
           - 0
+        freq: "monthly"
         day: 15
-    description: null
