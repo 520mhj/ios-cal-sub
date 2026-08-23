@@ -38,31 +38,31 @@ calendars:
         time: "10:30"
         alarms:
           - "-PT15M"
+        alarm_days_before:
+          - 1
         term: "春分"
         offset_days: -1
         days: 90
-        alarm_days_before:
-          - 1
       - type: "solar-term"
         title: "端午节·凤交颈·36下"
         time: "10:20"
         alarms:
           - "-PT1H"
+        alarm_days_before:
+          - 0
         term: "夏至"
         offset_days: 2
         days: 90
-        alarm_days_before:
-          - 0
       - type: "solar-term"
         title: "处暑打虫·服用菊桂化骨散"
         time: "16:00"
         alarms:
           - "-PT10M"
+        alarm_days_before:
+          - 1
         term: "处暑"
         offset_days: 0
         days: 5
-        alarm_days_before:
-          - 1
   - id: "recurring"
     name: "⏰ 固定循环事项"
     sources:
