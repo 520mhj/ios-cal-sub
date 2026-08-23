@@ -145,7 +145,7 @@ function toast(msg, isErr){ const t=$('toast'); t.textContent=msg; t.className='
   setTimeout(()=>{t.className='';}, isErr?5200:2800); }
 
 async function sha256Hex(str){
-  const buf = new TextEncoder().encode(str.trim());
+  const buf = new TextEncoder().encode(str.trim().toLowerCase()); // 大小写归一,与 keygen 保持一致
   const dig = await crypto.subtle.digest('SHA-256', buf);
   return [...new Uint8Array(dig)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
