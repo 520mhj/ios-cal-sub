@@ -74,24 +74,14 @@ calendars:
     name: "⏰ 固定循环事项"
     sources:
       - type: "rule"
-        title: "信用卡还款日"
-        time: "09:00"
+        title: "每月必做"
+        time: "19:40"
         alarms:
           - "-P1D"
           - "-PT1H"
         freq: "monthly"
-        day: 25
-      - type: "rule"
-        title: "垃圾分类·周四晚上倒"
-        time: "19:30"
-        freq: "weekly"
-        weekday: "thu"
-      - type: "rule"
-        title: "车辆年检截止"
+        note: "爸爸200花费、两个手机卡各50、家里电费各100"
         alarm_days_before:
-          - 14
-          - 1
-        freq: "yearly"
-        day: 30
-        month: 6
-        end: "2028-12-31"
+          - 0
+        day: 15
+    description: null
