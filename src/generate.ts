@@ -101,6 +101,36 @@ ${cards}
 </html>`;
 }
 
+/** CLI 入口前的基础设施:运行时配置解析(环境变量优先,yaml 兜底) */
+
+/**
+ * 解析生效配置:
+ *   CAL_SITE_BASE_URL      > cfg.site_base_url
+ *   CAL_EDITOR_KEY_SHA256  > cfg.editor_auth.key_sha256
+ *   CAL_EDITOR_HINT        > cfg.editor_auth.hint
+ * 线上(GitHub Actions)通过仓库 Variables/Secrets 注入;
+ * 本地不设环境变量时自动回落到 calendars.yaml 的同名字段。
+ * 注意:data.json 写入的是「未解析」的原始配置,避免把哈希发布到公开产物。
+ */
+export function resolveConfig(cfg: AppConfig): AppConfig {
+  const envBase = (process.env.CAL_SITE_BASE_URL ?? '').trim();
+  const envHash = (process.env.CAL_EDITOR_KEY_SHA256 ?? '').trim().toLowerCase();
+  const envHint = (process.env.CAL_EDITOR_HINT ?? '').trim();
+
+  let out = cfg;
+  if (envBase) out = { ...out, site_base_url: envBase };
+
+  if (envHash) {
+    if (!/^[a-f0-9]{64}$/.test(envHash)) {
+      console.warn('⚠️ 环境变量 CAL_EDITOR_KEY_SHA256 不是 64 位十六进制,已忽略该覆盖');
+    } else {
+      const hint = envHint || cfg.editor_auth?.hint;
+      out = { ...out, editor_auth: { key_sha256: envHash, ...(hint ? { hint } : {}) } };
+    }
+  }
+  return out;
+}
+
 export interface BuildSummaryRow {
   id: string;
   name: string;
@@ -124,9 +154,10 @@ export interface BuildResult {
   rows: BuildSummaryRow[];
 }
 
-/** 核心构建:展开全部事件源并写出 dist/*.ics + index.html + manifest.json */
+/** 核心构建:展开全部事件源并写出 dist/*.ics + index.html + manifest.json + editor/ */
 export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
   const cfg = opts.config;
+  const eff = resolveConfig(cfg); // 环境变量优先的生效配置(用于 index.html / auth.json)
   const win = buildWindow(cfg.defaults.years_ahead);
   const outDir = path.resolve(opts.distDir ?? 'dist');
   await fs.promises.mkdir(outDir, { recursive: true });
@@ -183,12 +214,18 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
     'utf8',
   );
   await fs.promises.writeFile(
+    path.join(outDir, 'index.html'),
+    indexHtml(eff, summaryRows, generatedAt),
+    'utf8',
+  );
+  await fs.promises.writeFile(
     path.join(outDir, 'manifest.json'),
     JSON.stringify({ generated_at: generatedAt, window: win, calendars: summaryRows }, null, 2),
     'utf8',
   );
 
-  // 在线编辑器产物:data.json(结构化配置)+ editor/(门禁信息 + 单页应用)
+  // 在线编辑器产物:data.json 写「未解析」的原始配置(不把密钥哈希发布到公开产物);
+  // editor/auth.json 用解析后的生效值(环境变量优先)。
   const edDir = path.join(outDir, 'editor');
   await fs.promises.mkdir(edDir, { recursive: true });
   await fs.promises.writeFile(
@@ -199,9 +236,9 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
   await fs.promises.writeFile(
     path.join(edDir, 'auth.json'),
     JSON.stringify({
-      enabled: !!cfg.editor_auth?.key_sha256,
-      sha256: cfg.editor_auth?.key_sha256 ?? '',
-      hint: cfg.editor_auth?.hint ?? '',
+      enabled: !!eff.editor_auth?.key_sha256,
+      sha256: eff.editor_auth?.key_sha256 ?? '',
+      hint: eff.editor_auth?.hint ?? '',
     }),
     'utf8',
   );

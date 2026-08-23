@@ -20,11 +20,11 @@ console.log(`
 
    ${uuid}
 
-把它对应的哈希写进 calendars.yaml(已为你生成好粘贴内容):
+线上启用(推荐):把下面的哈希配置为仓库的 Actions Secret
+  GitHub → Settings → Secrets and variables → Actions → New repository secret
+  Name:  CAL_EDITOR_KEY_SHA256
+  Value: ${hash}
 
-editor_auth:
-  key_sha256: "${hash}"
-
-然后 pnpm cal:build / git push 生效。编辑页输入上面的 UUID 即可解锁。
-忘记密钥?换一个新的:pnpm cal:key(用新哈希覆盖旧配置即可)。
+本地启用(可选):写进 calendars.yaml 的 editor_auth.key_sha256。
+忘记密钥?重新 pnpm cal:key 并更新 Secret 即可。
 `);

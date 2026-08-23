@@ -36,23 +36,29 @@ pnpm cal:key      # (可选)生成在线编辑器的访问密钥 UUID + 哈希
 
 ### 首次启用三步
 
-1. **生成访问密钥**:`pnpm cal:key` → 得到一个 UUID(自行保管)和它的 SHA-256,
-   按提示把 `editor_auth.key_sha256` 粘进 `calendars.yaml`
-2. push 部署后,打开 `/editor/` 会看到 🔐 锁屏,输入 UUID 解锁
-3. 点右上角 **🔑 GitHub 设置**:填 Owner/Repo/分支(从 github.io 地址自动识别)+
-   **Fine-grained PAT**(仅授予该仓库 Contents 读写)
+1. **生成访问密钥**:`pnpm cal:key` → 得到一个 UUID(自行保管)和它的 SHA-256
+2. **配置仓库 Secret**(零提交,立即对下次构建生效):
+   GitHub 仓库 → Settings → Secrets and variables → Actions:
+   - **Secrets**: `CAL_EDITOR_KEY_SHA256` = 哈希值
+   - **Variables**: `CAL_SITE_BASE_URL` = `https://你的用户名.github.io/仓库名`(订阅页链接用)
+3. 打开 `/editor/` 会看到 🔐 锁屏,输入 UUID 解锁;点右上角 **🔑 GitHub 设置**:
+   填 Owner/Repo/分支(从 github.io 地址自动识别)+ **Fine-grained PAT**(仅授予该仓库 Contents 读写)
 
 之后日常就是:解锁 → 加/改事件 → 「🚀 保存到 GitHub」→ 等 CI 绿勾 → iPhone 刷新订阅。
+
+> 站点地址与密钥哈希通过 Actions Variables/Secrets 注入构建(`CAL_SITE_BASE_URL`
+> / `CAL_EDITOR_KEY_SHA256` / 可选 `CAL_EDITOR_HINT`),不进代码仓库;
+> `calendars.yaml` 的同名字段仅作为本地构建的可选兜底。
 
 ### 安全模型(重要)
 
 | 层 | 机制 | 说明 |
 |---|---|---|
-| 编辑页门禁 | UUID 的 SHA-256 校验 | 只防"偷看"编辑界面;哈希公开但 UUID 不在库里(UUID v4 有 122 位熵,不可暴力) |
+| 编辑页门禁 | UUID 的 SHA-256 校验 | 只防"偷看"编辑界面;**哈希存于 Actions Secret**,不进 git 历史也不出现在公开产物(UUID v4 有 122 位熵,不可暴力) |
 | 真正的写权限 | GitHub Fine-grained PAT | 只授予这一个仓库的 Contents 读写;Token 仅存于你浏览器的 localStorage(可勾选不记住) |
 | 数据公开边界 | `data.json` 与 `.ics` 本身公开 | 能订阅就能看内容;若生日等高度敏感,请勿使用公开 Pages,或接受"知道 URL 即可订阅"的现实 |
 
-- 忘记 UUID:重新 `pnpm cal:key` 覆盖配置提交即可
+- 忘记 UUID:重新 `pnpm cal:key`,把新哈希更新到 Secret 即可(无需任何提交)
 - Token 泄露:GitHub → Settings → Developer settings 里立即 revoke
 
 ### 工作原理
@@ -85,7 +91,9 @@ iPhone 订阅 ← dist/*.ics ← GitHub Actions(CI 自动构建)← calendars.ya
 ## 配置参考(calendars.yaml)
 
 ```yaml
-site_base_url: ""            # 部署后的站点地址,用于 index.html 的 webcal 链接;本地预览留空
+# 线上站点地址/编辑器密钥走仓库 Variables & Secrets(CAL_SITE_BASE_URL 等),
+# 此字段仅作本地构建的可选兜底:
+site_base_url: ""
 defaults:
   timezone: Asia/Shanghai
   years_ahead: 2             # 向未来展开几年
@@ -143,7 +151,8 @@ calendars:
 1. 在 GitHub 新建仓库(或 private→public,GitHub Pages 免费版需公开仓库),push 本项目
 2. 仓库 **Settings → Pages → Build and deployment → Source 选 GitHub Actions**
 3. 推送到 `main` 即触发首次部署;此后**每天北京时间 09:00 自动重建**
-4. 部署完成后把 `https://用户名.github.io/仓库名` 填入 `calendars.yaml` 的 `site_base_url`
+4. 部署完成后,在仓库 **Settings → Secrets and variables → Actions → Variables** 新建
+   `CAL_SITE_BASE_URL` = `https://用户名.github.io/仓库名`(下次构建起订阅链接可用)
 
 ### 自动更新机制
 

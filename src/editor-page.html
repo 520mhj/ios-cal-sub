@@ -406,12 +406,11 @@ function openNewCalendar(){
 function openSettings(){
   $('dlgTitle').textContent='全局设置';
   $('dlgBody').innerHTML=`<div class="grid">
-    ${fld('site_base_url(部署地址,可留空)',`<input id="st_base" value="${esc(cfg.site_base_url??'')}" placeholder="https://you.github.io/repo">`)}
     ${fld('时区',`<select id="st_tz">${['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Singapore','UTC'].map(z=>`<option ${cfg.defaults.timezone===z?'selected':''}>${z}</option>`).join('')}</select>`)}
-    ${fld('向未来展开几年',`<input id="st_ya" type="number" min="1" max="10" value="${cfg.defaults.years_ahead}">`)}</div>`;
+    ${fld('向未来展开几年',`<input id="st_ya" type="number" min="1" max="10" value="${cfg.defaults.years_ahead}">`)}</div>
+    <p class="hint">站点地址(site_base_url)与编辑器密钥已迁移到仓库的 Actions Variables / Secrets(CAL_SITE_BASE_URL、CAL_EDITOR_KEY_SHA256),不在此处管理。</p>`;
   $('dlg').showModal();
   $('dlgOk').onclick=()=>{
-    cfg.site_base_url=$('st_base').value.trim();
     cfg.defaults.timezone=$('st_tz').value;
     cfg.defaults.years_ahead=Number($('st_ya').value)||2;
     closeDlg(); toast('设置已记录,保存到 GitHub 后生效');

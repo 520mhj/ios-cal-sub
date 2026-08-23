@@ -15,6 +15,7 @@ import { parse as parseYaml } from 'yaml';
 import { lunarToSolar, solarTermDatesInRange } from '../src/sources.js';
 import { configSchema } from '../src/types.js';
 import { dumpYaml } from '../src/yaml-dump.js';
+import { resolveConfig } from '../src/generate.js';
 
 let failures = 0;
 const fail = (msg: string) => {
@@ -210,11 +211,14 @@ console.log('\n━━ 6. 在线编辑器产物(Pages /editor/)━━');
   }
 
   try {
-    const authInfo = JSON.parse(fs.readFileSync(edAuth, 'utf8')) as { enabled: boolean; sha256: string };
-    const wantEnabled = !!(dataObj?.config as { editor_auth?: unknown })?.editor_auth;
-    if (authInfo.enabled === wantEnabled && authInfo.sha256 === ((dataObj!.config as { editor_auth?: { key_sha256?: string } }).editor_auth?.key_sha256 ?? ''))
-      pass(`auth.json 与配置一致(门禁${wantEnabled ? '已启用' : '未配置'})`);
-    else fail('auth.json 与 calendars.yaml 的 editor_auth 不一致');
+    const authInfo = JSON.parse(fs.readFileSync(edAuth, 'utf8')) as { enabled: boolean; sha256: string; hint?: string };
+    // 与「解析后」的配置比对(环境变量优先,yaml 兜底)——和构建时同一套逻辑
+    const rawCfg = configSchema.parse(parseYaml(fs.readFileSync(path.resolve('calendars.yaml'), 'utf8')));
+    const eff = resolveConfig(rawCfg);
+    const wantEnabled = !!eff.editor_auth?.key_sha256;
+    if (authInfo.enabled === wantEnabled && authInfo.sha256 === (eff.editor_auth?.key_sha256 ?? ''))
+      pass(`auth.json 与生效配置一致(门禁${wantEnabled ? '已启用' : '未启用'})`);
+    else fail('auth.json 与解析后的 editor_auth 不一致');
   } catch (e) {
     fail(`auth.json 检查失败:${(e as Error).message}`);
   }

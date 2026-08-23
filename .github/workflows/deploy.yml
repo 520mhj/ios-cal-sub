@@ -23,6 +23,14 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    # 站点地址与编辑器门禁走仓库 Variables/Secrets,与 calendars.yaml 解耦:
+    #   Variable  CAL_SITE_BASE_URL      例: https://520mhj.github.io/ios-cal-sub
+    #   Secret    CAL_EDITOR_KEY_SHA256  pnpm cal:key 生成的哈希(64 位十六进制)
+    #   Variable  CAL_EDITOR_HINT        锁屏提示语(可选)
+    env:
+      CAL_SITE_BASE_URL: ${{ vars.CAL_SITE_BASE_URL }}
+      CAL_EDITOR_KEY_SHA256: ${{ secrets.CAL_EDITOR_KEY_SHA256 }}
+      CAL_EDITOR_HINT: ${{ vars.CAL_EDITOR_HINT }}
     steps:
       - uses: actions/checkout@v4
 
