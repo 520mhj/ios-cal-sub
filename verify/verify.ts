@@ -205,9 +205,20 @@ console.log('\n━━ 4. 配置 ↔ 产物全量一致性 ━━');
 console.log('\n━━ 5. index.html / manifest 一致性 ━━');
 {
   const html = fs.readFileSync(path.join(distDir, 'index.html'), 'utf8');
-  const missingLink = manifest.calendars.filter((c) => !html.includes(c.file));
-  if (missingLink.length === 0) pass('index.html 包含全部日历链接');
-  else fail(`index.html 缺少链接:${missingLink.map((c) => c.id).join(', ')}`);
+  const protectedMode = manifest.calendars.some((c) => c.file.includes('/'));
+  if (protectedMode) {
+    if (html.includes('data-subscribe-protected'))
+      pass('订阅保护已开启:index.html 含密钥解锁入口,未泄露任何明文链接');
+    else fail('订阅保护已开启,但 index.html 缺少解锁入口标记');
+
+    const leaked = manifest.calendars.filter((c) => fs.existsSync(path.join(distDir, `${c.id}.ics`)));
+    if (leaked.length === 0) pass('根目录无明文 .ics 残留');
+    else fail(`根目录仍存在明文文件:${leaked.map((c) => c.id).join(', ')}`);
+  } else {
+    const missingLink = manifest.calendars.filter((c) => !html.includes(c.file));
+    if (missingLink.length === 0) pass('index.html 包含全部日历链接');
+    else fail(`index.html 缺少链接:${missingLink.map((c) => c.id).join(', ')}`);
+  }
 }
 
 console.log('\n━━ 6. 在线编辑器产物(Pages /editor/)━━');

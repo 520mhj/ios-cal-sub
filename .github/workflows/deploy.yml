@@ -23,14 +23,16 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    # 站点地址与编辑器门禁走仓库 Variables/Secrets,与 calendars.yaml 解耦:
-    #   Variable  CAL_SITE_BASE_URL      例: https://520mhj.github.io/ios-cal-sub
-    #   Secret    CAL_EDITOR_KEY_SHA256  pnpm cal:key 生成的哈希(64 位十六进制)
-    #   Variable  CAL_EDITOR_HINT        锁屏提示语(可选)
+    # 站点地址与访问密钥走仓库 Variables/Secrets,与 calendars.yaml 解耦:
+    #   Secret    CAL_EDITOR_KEY     访问密钥 UUID 原样(pnpm cal:key 生成)
+    #   Variable  CAL_SITE_BASE_URL  例: https://520mhj.github.io/ios-cal-sub
+    #   Variable  CAL_EDITOR_HINT    锁屏提示语(可选)
+    #   Variable  CAL_SUBSCRIBE_KEY  订阅保护密钥(可选;配置即开启订阅保护)
     env:
       CAL_SITE_BASE_URL: ${{ vars.CAL_SITE_BASE_URL }}
-      CAL_EDITOR_KEY_SHA256: ${{ secrets.CAL_EDITOR_KEY_SHA256 }}
+      CAL_EDITOR_KEY: ${{ secrets.CAL_EDITOR_KEY }}
       CAL_EDITOR_HINT: ${{ vars.CAL_EDITOR_HINT }}
+      CAL_SUBSCRIBE_KEY: ${{ vars.CAL_SUBSCRIBE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,13 +40,18 @@ jobs:
       # (Secret 的值会被 GitHub 自动打码为 ***,只看是否为 SET)
       - name: Diagnose config injection
         run: |
-          echo "CAL_SITE_BASE_URL     = [${{ vars.CAL_SITE_BASE_URL }}]"
-          if [ -n "${{ secrets.CAL_EDITOR_KEY_SHA256 }}" ]; then
-            echo "CAL_EDITOR_KEY_SHA256 = [SET]"
+          echo "CAL_SITE_BASE_URL = [${{ vars.CAL_SITE_BASE_URL }}]"
+          if [ -n "${{ secrets.CAL_EDITOR_KEY }}" ]; then
+            echo "CAL_EDITOR_KEY    = [SET]"
           else
-            echo "CAL_EDITOR_KEY_SHA256 = [(empty)]"
+            echo "CAL_EDITOR_KEY    = [(empty)]"
           fi
-          echo "CAL_EDITOR_HINT       = [${{ vars.CAL_EDITOR_HINT }}]"
+          echo "CAL_EDITOR_HINT   = [${{ vars.CAL_EDITOR_HINT }}]"
+          if [ -n "${{ vars.CAL_SUBSCRIBE_KEY }}" ]; then
+            echo "CAL_SUBSCRIBE_KEY = [SET → 订阅保护已开启]"
+          else
+            echo "CAL_SUBSCRIBE_KEY = [(empty) → 订阅保护关闭]"
+          fi
 
       - uses: pnpm/action-setup@v4 # 版本读自 package.json 的 packageManager 字段
 

@@ -1,6 +1,7 @@
 /** 生成器:既作 CLI 入口,也导出 buildCalendars() 供 Web 编辑器复用 */
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { configSchema, type AppConfig, type Occurrence } from './types.js';
@@ -55,23 +56,66 @@ export function loadConfig(cfgPath: string): AppConfig {
   return parsed.data;
 }
 
-function indexHtml(cfg: AppConfig, rows: BuildSummaryRow[], generatedAt: string): string {
+function indexHtml(
+  cfg: AppConfig,
+  rows: BuildSummaryRow[],
+  generatedAt: string,
+  prot: SubscribeProtection,
+): string {
   const base = cfg.site_base_url?.replace(/\/+$/, '') ?? '';
-  const subscribeBtn = (file: string) =>
-    base
-      ? `<a class="btn" href="webcal://${base.replace(/^https?:\/\//, '')}/${file}">📲 订阅(webcal)</a>`
-      : `<span class="btn disabled" title="在 calendars.yaml 填写 site_base_url 并重新生成后可用">📲 部署后可订阅</span>`;
+  const host = base.replace(/^https?:\/\//, '');
+
+  // 受保护模式:卡片不直接给出链接,页面底部输入密钥后本地计算令牌再生成
+  const subscribeBtn = (r: { id: string; file: string }) => {
+    if (prot.on) {
+      return `<span id="sl-${escapeHtml(r.id)}"><span class="btn disabled">🔒 输入密钥后显示</span></span>`;
+    }
+    return base
+      ? `<a class="btn" href="webcal://${host}/${r.file}">📲 订阅(webcal)</a>`
+      : `<span class="btn disabled" title="配置 Variable CAL_SITE_BASE_URL 并重新生成后可用">📲 部署后可订阅</span>`;
+  };
   const cards = rows
     .map(
       (r) => `  <div class="card">
     <h2>${escapeHtml(r.name)}</h2>
     <p class="meta">${r.count} 个事件 · 覆盖 ${r.first} ~ ${r.last}</p>
-    <p>${subscribeBtn(r.file)}
-       <a class="btn ghost" href="./${r.file}" download>⬇️ 下载 .ics</a></p>
-    <code>${escapeHtml(base ? `${base}/${r.file}` : r.file)}</code>
+    <p>${subscribeBtn(r)}</p>
+    <code id="cu-${escapeHtml(r.id)}">${escapeHtml(prot.on ? '🔒 已保护' : base ? `${base}/${r.file}` : r.file)}</code>
   </div>`,
     )
     .join('\n');
+
+  const unlockBlock = prot.on
+    ? `<div class="card" data-subscribe-protected>
+    <h2>🔒 本站已开启订阅保护</h2>
+    <p class="meta">输入订阅密钥后,下方为每个日历生成专属订阅链接(密钥只在本机使用,不会发送)。</p>
+    <p><input id="subkey" type="password" placeholder="订阅密钥" style="padding:8px;border-radius:9px;border:1px solid #8886">
+       <button class="btn" style="border:0;cursor:pointer" onclick="unlock()">显示订阅链接</button></p>
+  </div>
+  <script data-subscribe-protected>
+  async function subTok(key,id){
+    const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key+'|'+id));
+    return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,32);
+  }
+  async function unlock(){
+    const k=(document.getElementById('subkey').value||'').trim();
+    if(!k){alert('请输入订阅密钥');return}
+    try{sessionStorage.setItem('subKey',k)}catch(e){}
+    const ids=${JSON.stringify(rows.map((r) => r.id))};
+    for(const id of ids){
+      const t=await subTok(k,id);
+      const rel='s/'+t+'/'+id+'.ics';
+      const url='${host}'?'webcal://${host}/'+rel:rel;
+      const el=document.getElementById('sl-'+id);
+      if(el)el.innerHTML='<a class="btn" href="'+url+'">📲 订阅(webcal)</a>';
+      const cu=document.getElementById('cu-'+id);
+      if(cu)cu.textContent='${host}'?'https://${host}/'+rel:rel;
+    }
+  }
+  (function(){try{if(sessionStorage.getItem('subKey')){document.getElementById('subkey').value=sessionStorage.getItem('subKey');unlock()}}catch(e){}})();
+  </script>`
+    : '';
+
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -96,6 +140,7 @@ function indexHtml(cfg: AppConfig, rows: BuildSummaryRow[], generatedAt: string)
 <h1>📅 iOS 日历订阅</h1>
 <p>在 iPhone 上打开本页,点「订阅(webcal)」即可;或在 <b>设置 → 应用 → 日历 → 日历账户 → 添加订阅日历</b> 中粘贴下方链接。</p>
 ${cards}
+${unlockBlock}
 <footer>由 ios-cal-sub 生成于 ${escapeHtml(generatedAt)}。数据来源:<a href="https://github.com/NateScarlet/holiday-cn">NateScarlet/holiday-cn</a>(国务院公告自动化解析)。</footer>
 </body>
 </html>`;
@@ -105,30 +150,62 @@ ${cards}
 
 /**
  * 解析生效配置:
- *   CAL_SITE_BASE_URL      > cfg.site_base_url
- *   CAL_EDITOR_KEY_SHA256  > cfg.editor_auth.key_sha256
- *   CAL_EDITOR_HINT        > cfg.editor_auth.hint
+ *   CAL_SITE_BASE_URL  > cfg.site_base_url
+ *   CAL_EDITOR_KEY     > cfg.editor_auth.key_sha256(存 UUID 原样,构建时现算 SHA-256,
+ *                        公开产物只出现哈希,UUID 本身不落盘)
+ *   CAL_EDITOR_HINT    > cfg.editor_auth.hint
  * 线上(GitHub Actions)通过仓库 Variables/Secrets 注入;
  * 本地不设环境变量时自动回落到 calendars.yaml 的同名字段。
- * 注意:data.json 写入的是「未解析」的原始配置,避免把哈希发布到公开产物。
+ * 注意:data.json 写入的是「未解析」的原始配置,避免把密钥发布到公开产物。
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 export function resolveConfig(cfg: AppConfig): AppConfig {
   const envBase = (process.env.CAL_SITE_BASE_URL ?? '').trim();
-  const envHash = (process.env.CAL_EDITOR_KEY_SHA256 ?? '').trim().toLowerCase();
+  const envKey = (process.env.CAL_EDITOR_KEY ?? '').trim().toLowerCase();
   const envHint = (process.env.CAL_EDITOR_HINT ?? '').trim();
 
   let out = cfg;
   if (envBase) out = { ...out, site_base_url: envBase };
 
-  if (envHash) {
-    if (!/^[a-f0-9]{64}$/.test(envHash)) {
-      console.warn('⚠️ 环境变量 CAL_EDITOR_KEY_SHA256 不是 64 位十六进制,已忽略该覆盖');
+  if (envKey) {
+    if (!UUID_RE.test(envKey)) {
+      console.warn('⚠️ 环境变量 CAL_EDITOR_KEY 不是合法 UUID(8-4-4-4-12 十六进制),已忽略该覆盖');
     } else {
+      const sha256 = createHash('sha256').update(envKey).digest('hex');
       const hint = envHint || cfg.editor_auth?.hint;
-      out = { ...out, editor_auth: { key_sha256: envHash, ...(hint ? { hint } : {}) } };
+      out = { ...out, editor_auth: { key_sha256: sha256, ...(hint ? { hint } : {}) } };
     }
   }
   return out;
+}
+
+/** ---------- 订阅地址保护(capability URL) ---------- */
+
+export interface SubscribeProtection {
+  /** true 时 *.ics 写入不可猜测的 /s/<token>/ 路径,根目录不留副本 */
+  on: boolean;
+  key: string;
+}
+
+/** 订阅令牌:按日历独立派生,泄露单个日历链接不影响其他日历 */
+export function subscribeToken(key: string, calId: string): string {
+  return createHash('sha256').update(`${key}|${calId}`).digest('hex').slice(0, 32);
+}
+
+/**
+ * 开关 = 是否配置了 Variable `CAL_SUBSCRIBE_KEY`:
+ *   不配置 → 关闭,订阅地址即全部凭据;
+ *   配置(≥8 位)→ 开启,.ics 移入 /s/<令牌>/ 路径,首页需输入密钥才显示链接。
+ */
+export function readSubscribeProtection(): SubscribeProtection {
+  const key = (process.env.CAL_SUBSCRIBE_KEY ?? '').trim();
+  if (!key) return { on: false, key: '' };
+  if (key.length < 8) {
+    console.warn('⚠️ CAL_SUBSCRIBE_KEY 少于 8 位,强度不足,已忽略(不开启保护)');
+    return { on: false, key: '' };
+  }
+  return { on: true, key };
 }
 
 export interface BuildSummaryRow {
@@ -175,6 +252,14 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
   const stamp = stampUtcNow();
   const generatedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const summaryRows: BuildSummaryRow[] = [];
+  const prot = readSubscribeProtection();
+
+  // 开启订阅保护时,清理根目录可能残留的明文 .ics(上次未开保护时生成的)
+  if (prot.on) {
+    for (const f of await fs.promises.readdir(outDir)) {
+      if (f.endsWith('.ics')) await fs.promises.unlink(path.join(outDir, f));
+    }
+  }
 
   for (const cal of cfg.calendars) {
     const occs: Occurrence[] = [];
@@ -188,8 +273,13 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
       { name: cal.name, description: descParts.join(' | '), timezone: cfg.defaults.timezone, stampUtc: stamp },
       occs,
     );
-    const file = `${cal.id}.ics`;
-    await fs.promises.writeFile(path.join(outDir, file), ics, 'utf8');
+    let file = `${cal.id}.ics`;
+    const icsPath = prot.on
+      ? path.join(outDir, 's', subscribeToken(prot.key, cal.id), `${cal.id}.ics`)
+      : path.join(outDir, file);
+    if (prot.on) file = `s/${subscribeToken(prot.key, cal.id)}/${cal.id}.ics`;
+    await fs.promises.mkdir(path.dirname(icsPath), { recursive: true });
+    await fs.promises.writeFile(icsPath, ics, 'utf8');
 
     const countWithAlarms = occs.filter((o) => o.alarms.length > 0).length;
     const row: BuildSummaryRow = {
@@ -210,12 +300,7 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
 
   await fs.promises.writeFile(
     path.join(outDir, 'index.html'),
-    indexHtml(cfg, summaryRows, generatedAt),
-    'utf8',
-  );
-  await fs.promises.writeFile(
-    path.join(outDir, 'index.html'),
-    indexHtml(eff, summaryRows, generatedAt),
+    indexHtml(eff, summaryRows, generatedAt, prot),
     'utf8',
   );
   await fs.promises.writeFile(

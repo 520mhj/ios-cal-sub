@@ -1,11 +1,12 @@
 /**
- * 生成在线编辑器的访问密钥:
- *   pnpm cal:key            → 随机生成一个 UUID 并显示其 SHA-256
- *   pnpm cal:key <uuid>     → 为你指定的 UUID 计算哈希(找回时重新生成同值)
+ * 生成访问密钥(UUID):
+ *   pnpm cal:key            → 随机生成一个 UUID
+ *   pnpm cal:key <uuid>     → 使用你指定的 UUID(找回时保持不变)
  *
- * UUID 本身自行保存、绝不入库;仓库里只放哈希。
+ * UUID 原样存入仓库 Secret CAL_EDITOR_KEY(仅自己可见);
+ * 构建时自动计算其 SHA-256 写入公开产物——UUID 本身绝不入库、不出现在任何页面。
  */
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 const arg = process.argv[2];
 const uuid =
@@ -13,18 +14,15 @@ const uuid =
     ? arg.toLowerCase()
     : randomUUID();
 
-const hash = createHash('sha256').update(uuid.trim()).digest('hex');
-
 console.log(`
 🔑 你的访问密钥(UUID,请妥善自存,不要提交到任何仓库/网页):
 
    ${uuid}
 
-线上启用(推荐):把下面的哈希配置为仓库的 Actions Secret
+启用(推荐):把上面的 UUID 原样配置为仓库的 Actions Secret
   GitHub → Settings → Secrets and variables → Actions → New repository secret
-  Name:  CAL_EDITOR_KEY_SHA256
-  Value: ${hash}
+  Name:  CAL_EDITOR_KEY
+  Value: ${uuid}
 
-本地启用(可选):写进 calendars.yaml 的 editor_auth.key_sha256。
-忘记密钥?重新 pnpm cal:key 并更新 Secret 即可。
+解锁在线编辑器时输入这个 UUID 即可;忘记密钥?重新生成并更新 Secret。
 `);
