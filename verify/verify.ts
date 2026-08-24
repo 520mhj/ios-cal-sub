@@ -162,25 +162,33 @@ console.log('\n━━ 4. 配置 ↔ 产物全量一致性 ━━');
         continue;
       }
 
-      // UID 集合双向比对
+      // 定义级 UID 双向比对(RRULE 事件在两侧都只是一条定义)
       const actualUids = new Set(entry.events.map((e) => e.uid));
       const expectedUids = new Set(expected.map((o) => o.uid));
       const missing = [...expectedUids].filter((u) => !actualUids.has(u));
       const extra = [...actualUids].filter((u) => !expectedUids.has(u));
       if (missing.length === 0 && extra.length === 0)
-        pass(`事件集合与配置完全一致(${expected.length} 条,UID 逐条匹配)`);
+        pass(`事件定义与配置完全一致(${expected.length} 条,UID 逐条匹配)`);
       else {
         if (missing.length) fail(`缺少 ${missing.length} 条期望事件,如:${missing.slice(0, 3).join(', ')}`);
         if (extra.length) fail(`多出 ${extra.length} 条意外事件,如:${extra.slice(0, 3).join(', ')}`);
       }
 
-      // 定时事件:抽前 2 条核对 TZID 与时刻
+      // RRULE 规则体逐条核对
+      const rruleDefs = expected.filter((o) => o.rrule);
+      for (const o of rruleDefs) {
+        if (!entry.raw.includes(`RRULE:${o.rrule}`))
+          fail(`RRULE 缺失或不符:期望 [${o.rrule}](uid=${o.uid})`);
+      }
+      if (rruleDefs.length > 0)
+        pass(`重复规则正确(${rruleDefs.length} 条 RRULE)`);
+
+      // 首个发生日:抽前 2 条核对日期/TZID/时刻
       const timed = expected.filter((o) => o.time);
-      const tzEsc = cfg.defaults.timezone.replace('/', '\\/');
       for (const o of timed.slice(0, 2)) {
         const line = `DTSTART;TZID=${cfg.defaults.timezone}:${o.start.replace(/-/g, '')}T${o.time!.replace(':', '')}00`;
         if (!entry.raw.includes(line))
-          fail(`定时事件时刻不符:期望存在 ${line}`);
+          fail(`定时事件首发生日不符:期望存在 ${line}`);
       }
       if (timed.length > 0)
         pass(`定时事件时刻/TZID 正确(抽查 ${Math.min(2, timed.length)}/${timed.length} 条)`);

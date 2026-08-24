@@ -74,6 +74,8 @@ function eventLines(ev: Occurrence, meta: CalendarMeta): string[] {
     L.push(`DTSTART;VALUE=DATE:${compact}`);
     L.push(`DTEND;VALUE=DATE:${ev.end.replace(/-/g, '')}`);
   }
+  // RFC 5545 重复规则:存在时 start 仅是首个发生日,订阅端自行展开
+  if (ev.rrule) L.push(`RRULE:${ev.rrule}`);
   L.push(`SUMMARY:${escapeText(ev.summary)}`);
   if (ev.description) L.push(`DESCRIPTION:${escapeText(ev.description)}`);
   L.push(`LAST-MODIFIED:${meta.stampUtc}`);

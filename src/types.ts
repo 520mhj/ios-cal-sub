@@ -168,6 +168,12 @@ export interface Occurrence {
   summary: string;
   description?: string;
   alarms: string[];
+  /**
+   * RFC 5545 RRULE 规则体(如 `FREQ=DAILY;COUNT=90`、`FREQ=MONTHLY;UNTIL=20281225T235959Z`)。
+   * 存在时,start/end 仅描述首个发生日;订阅端按规则自行展开后续发生日。
+   * 用于节气连续场景与周/月/年循环——避免把每个发生日物化成独立 VEVENT。
+   */
+  rrule?: string;
 }
 
 /** holiday-cn 官方数据结构(NateScarlet/holiday-cn) */

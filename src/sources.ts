@@ -252,8 +252,76 @@ export function expandRule(
     start: src.start && cmpDate(src.start, win.start) > 0 ? src.start : win.start,
     end: src.end && cmpDate(src.end, win.end) < 0 ? src.end : win.end,
   };
-  const dates: string[] = [];
+  const descParts = [FREQ_TEXT[src.freq]];
+  if (src.time) descParts.push(`时间 ${src.time}`);
+  if (src.note) descParts.push(src.note);
+  const base = {
+    time: src.time ?? null,
+    summary: `⏰ ${src.title}`,
+    description: descParts.join(' | '),
+    alarms: mergeAlarms(src),
+  };
 
+  const untilCompact = range.end.replace(/-/g, '');
+  // UNTIL 的类型必须与 DTSTART 一致:定时事件用 UTC 日期时间,全天用日期
+  const until = base.time ? `${untilCompact}T235959Z` : untilCompact;
+
+  // ---- 可安全表达为 RFC 5545 RRULE 的形态:单条定义,订阅端自行展开 ----
+  // 月循环 day>28 或 2月29日 无法用 BYMONTHDAY 表达"钳到月末"的语义,回退为逐年物化。
+  if (src.freq === 'weekly' && src.weekday) {
+    // 找窗口内第一个目标星期
+    let d = range.start;
+    for (let i = 0; i < 7 && new Date(`${d}T00:00:00Z`).getUTCDay() !== WEEKDAY_NUM[src.weekday]; i++)
+      d = addDays(d, 1);
+    if (cmpDate(d, range.end) <= 0)
+      return [{
+        ...base,
+        uid: makeUid(calId, `rule-${src.title}`, 'weekly'),
+        start: d,
+        end: addDays(d, 1),
+        rrule: `FREQ=WEEKLY;UNTIL=${until}`,
+      }];
+    return [];
+  }
+  if (src.freq === 'monthly' && src.day != null && src.day <= 28) {
+    let y = Number(range.start.slice(0, 4));
+    let m = Number(range.start.slice(5, 7));
+    for (;;) {
+      const date = `${y}-${String(m).padStart(2, '0')}-${String(src.day).padStart(2, '0')}`;
+      if (cmpDate(date, range.start) >= 0) {
+        if (cmpDate(date, range.end) > 0) return [];
+        return [{
+          ...base,
+          uid: makeUid(calId, `rule-${src.title}`, 'monthly'),
+          start: date,
+          end: addDays(date, 1),
+          rrule: `FREQ=MONTHLY;UNTIL=${until}`,
+        }];
+      }
+      m++;
+      if (m > 12) { m = 1; y++; }
+    }
+  }
+  if (src.freq === 'yearly' && !(src.month === 2 && src.day === 29)) {
+    const startY = Number(range.start.slice(0, 4));
+    for (let y = startY; y <= Number(range.end.slice(0, 4)); y++) {
+      const date = `${y}-${String(src.month!).padStart(2, '0')}-${String(Math.min(src.day!, lastDayOfMonth(y, src.month!))).padStart(2, '0')}`;
+      if (cmpDate(date, range.start) >= 0) {
+        if (cmpDate(date, range.end) > 0) return [];
+        return [{
+          ...base,
+          uid: makeUid(calId, `rule-${src.title}`, 'yearly'),
+          start: date,
+          end: addDays(date, 1),
+          rrule: `FREQ=YEARLY;UNTIL=${until}`,
+        }];
+      }
+    }
+    return [];
+  }
+
+  // ---- 物化回退:once、月末钳制语义(day>28 / 2·29)等 ----
+  const dates: string[] = [];
   if (src.freq === 'once') {
     if (!src.date) throw new Error(`规则 "${src.title}" freq=once 需要提供 date`);
     if (inRange(src.date, range)) dates.push(src.date);
@@ -279,7 +347,7 @@ export function expandRule(
       }
     }
   } else {
-    // yearly
+    // yearly(含 2·29 跳过非闰年的既有语义)
     if (src.month == null || src.day == null)
       throw new Error(`规则 "${src.title}" freq=yearly 需要提供 month 和 day`);
     const startY = Number(range.start.slice(0, 4));
@@ -291,18 +359,11 @@ export function expandRule(
     }
   }
 
-  const descParts = [FREQ_TEXT[src.freq]];
-  if (src.time) descParts.push(`时间 ${src.time}`);
-  if (src.note) descParts.push(src.note);
-
   return dates.map((date) => ({
+    ...base,
     uid: makeUid(calId, `rule-${src.title}`, date),
     start: date,
     end: addDays(date, 1),
-    time: src.time ?? null,
-    summary: `⏰ ${src.title}`,
-    description: descParts.join(' | '),
-    alarms: mergeAlarms(src),
   }));
 }
 
@@ -342,31 +403,35 @@ export function expandSolarTerm(
   const termDates = all.get(src.term) ?? [];
   const out: Occurrence[] = [];
   for (const d of termDates) {
-    for (let i = 0; i < src.days; i++) {
-      const date = addDays(d, src.offset_days + i);
-      if (cmpDate(date, win.start) < 0 || cmpDate(date, win.end) > 0) continue;
-      const descParts: string[] = [];
-      descParts.push(
-        src.days > 1 ? `${src.term}起第 ${i + 1}/${src.days} 天` : `节气日:${src.term}`,
-      );
-      if (src.offset_days !== 0 && src.days === 1)
-        descParts.push(`${src.term}${src.offset_days > 0 ? '后' : '前'}第 ${Math.abs(src.offset_days)} 天`);
-      else if (src.offset_days !== 0)
-        descParts.push(`起点:${src.term}${src.offset_days > 0 ? '后' : '前'}第 ${Math.abs(src.offset_days)} 天`);
-      if (src.note) descParts.push(src.note);
-      out.push({
-        uid: makeUid(calId, `term-${src.term}-${src.offset_days}`, date),
-        start: date,
-        end: addDays(date, 1),
-        time: src.time ?? null,
-        summary:
-          src.days > 1
-            ? `⛅ ${src.title}(${i + 1}/${src.days})`
-            : `⛅ ${src.title}`,
-        description: descParts.join(' | '),
-        alarms: mergeAlarms(src),
-      });
+    // 锚点 = 节气日 + 偏移;序列 [锚点, 锚点+days-1]
+    const anchor = addDays(d, src.offset_days);
+    const lastDay = addDays(anchor, src.days - 1);
+    // 序列与窗口有交集才生成(允许 DTSTART 略早于窗口起点的进行中序列)
+    if (cmpDate(lastDay, win.start) < 0 || cmpDate(anchor, win.end) > 0) continue;
+
+    const offsetText =
+      src.offset_days === 0 ? '' : `${src.term}${src.offset_days > 0 ? '后' : '前'}第 ${Math.abs(src.offset_days)} 天`;
+    const descParts: string[] = [];
+    if (src.days > 1)
+      descParts.push(`每年${offsetText || src.term}开始,连续 ${src.days} 天(订阅端按 RRULE 自动展开)`);
+    else descParts.push(offsetText || `节气日:${src.term}`);
+    if (src.note) descParts.push(src.note);
+
+    const occ: Occurrence = {
+      uid: makeUid(calId, `term-${src.term}-${src.offset_days}`, anchor.slice(0, 4)),
+      start: anchor,
+      end: addDays(anchor, src.days),
+      time: src.time ?? null,
+      summary: `⛅ ${src.title}`,
+      description: descParts.join(' | '),
+      alarms: mergeAlarms(src),
+    };
+    if (src.days > 1) {
+      // 每年一条 + 每日重复 N 次:语义即"每年该节气都有,往后连续 N 天"
+      occ.rrule = `FREQ=DAILY;COUNT=${src.days}`;
+      occ.end = addDays(anchor, src.days); // 全天事件排他 DTEND=末日后一天
     }
+    out.push(occ);
   }
   return out;
 }
