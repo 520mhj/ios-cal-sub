@@ -11,6 +11,7 @@ calendars:
       - type: "holidays-cn"
         include_rest_days: true
         include_workdays: true
+    access: "public"
   - id: "family-days"
     name: "🎂 家人生日与纪念日"
     description: "农历自动换算公历,逐年展开"
@@ -29,6 +30,7 @@ calendars:
           - 7
         month: 10
         day: 2
+    access: "public"
   - id: "jieqi-notes"
     name: "⛅ 节气提醒"
     description: "二十四节气锚定,支持前一天预告与连续多天打卡"
@@ -61,6 +63,7 @@ calendars:
         term: "处暑"
         offset_days: 0
         days: 5
+    access: "public"
   - id: "recurring"
     name: "⏰ 固定循环事项"
     sources:
@@ -75,3 +78,4 @@ calendars:
           - 0
         freq: "monthly"
         day: 15
+    access: "private"
