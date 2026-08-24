@@ -23,7 +23,9 @@ export interface Window {
 export function buildWindow(yearsAhead: number): Window {
   const now = new Date();
   return {
-    start: addDays(todayLocal(), -14), // 回看两周:改配置后近期的历史事件也能补上
+    // 从当年 1 月 1 日起:订阅日历应当能看到今年已经过去的节日/连续打卡,
+    // 否则 iPhone 端会出现"事件从年中被截断"的困惑(窗口外日期根本不写入 .ics)
+    start: `${now.getFullYear()}-01-01`,
     end: `${now.getFullYear() + yearsAhead}-12-31`,
   };
 }
