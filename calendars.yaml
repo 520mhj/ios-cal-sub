@@ -63,7 +63,7 @@ calendars:
         term: "处暑"
         offset_days: 0
         days: 5
-    access: "public"
+    access: "private"
   - id: "recurring"
     name: "⏰ 固定循环事项"
     sources:
