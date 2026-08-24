@@ -71,3 +71,11 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      # 每日日程推送(Bark,可选):仅定时/手动触发时执行,push 构建不打扰。
+      # 配置仓库 Secret CAL_BARK_KEY = Bark App 里复制的 Key 后自动启用。
+      - name: Daily digest push (Bark)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          CAL_BARK_KEY: ${{ secrets.CAL_BARK_KEY }}
+        run: node_modules/.bin/tsx scripts/notify-daily.ts
