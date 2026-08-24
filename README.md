@@ -18,7 +18,8 @@
 - 🔒 **稳定 UID**:同一逻辑事件的 UID 永不变化,数据更新后订阅端是"修改"而不是"重复新增"
 - 📄 **RFC 5545 合规**:CRLF、75 字节折行(UTF-8 安全)、TEXT 转义、全天事件排他 DTEND
 - 🌏 时区正确处理:定时事件带 `TZID=Asia/Shanghai` + VTIMEZONE;节假日/生日为全天事件
-- ✅ **内置验证**(`pnpm cal:verify`):物理格式检查 + ts-ics 第三方回读解析 + 已知日期事实抽查
+- ✅ **内置验证**(`pnpm cal:verify`):物理格式检查 + ts-ics 第三方回读解析 + 天文事实抽查
+  + 配置↔产物定义级比对(UID 双向 diff、RRULE 规则体逐条核对、VALARM 总数精确相等)
 - ♻️ 数据来源 [NateScarlet/holiday-cn](https://github.com/NateScarlet/holiday-cn)(自动解析国务院公告,社区最权威)
 
 ```bash
@@ -90,6 +91,28 @@ iPhone 订阅 ← dist/*.ics ← GitHub Actions(CI 自动构建)← calendars.ya
 > 💡 订阅日历是**只读**的。iOS 会周期性自动刷新(通常几小时一次);
 > 想立即刷新:设置 → 应用 → 日历 → 日历账户 → 对应订阅 → 强制刷新(或删除重加)。
 
+## 🔔 让提醒真正响铃(重要,务必设置)
+
+文件内已按 RFC 5545 写入每条事件的提醒指令(VALARM),但 **iOS 对"订阅式日历"
+会整体忽略文件内的提醒**——事件详情里的「提醒」显示为"无"。这不是生成缺陷,
+换任何 .ics 订阅源都一样(Google 日历等客户端则会正常生效)。
+
+**解决办法(一次设置,全局生效)**:
+
+```
+iPhone 设置 → 应用 → 日历 → 默认提醒时间
+├─ 「日程」改为 → 日程开始时        ← 关键一步
+└─ 「全天事件」建议 → 前一天 21:00(或按习惯)
+```
+
+- 设置后,所有没有本地提醒的订阅事件都会套用默认策略响铃;
+- 定时事件在**开始时刻**触发(本工具生成的定时事件时长固定 30 分钟,
+  如 9:30 的事件在 9:30–10:00 这个区间内提醒);
+- 全天事件(节假日/生日)按你给「全天事件」配的时间触发。
+
+备选方案:① 点开单条事件手动选提醒(本地保存,对订阅事件也有效);
+② 用「快捷指令 → 自动化」把当天订阅事件转成提醒事项,实现精确到分钟的自动铃声。
+
 ## 配置参考(calendars.yaml)
 
 ```yaml
@@ -98,7 +121,7 @@ iPhone 订阅 ← dist/*.ics ← GitHub Actions(CI 自动构建)← calendars.ya
 site_base_url: ""
 defaults:
   timezone: Asia/Shanghai
-  years_ahead: 2             # 向未来展开几年
+  years_ahead: 2             # 生成窗口 = 当年1月1日 ~ 今年+N 年的12月31日
 
 calendars:
   - id: cn-holidays          # 输出文件名 cn-holidays.ics(id 只能小写字母数字连字符)
@@ -134,6 +157,14 @@ calendars:
         start: "2026-01-01"  # 可选:限定区间
         end: "2028-12-31"
         alarms: ["-P1D", "-PT1H"]
+
+      - type: solar-term      # 节气锚定(每年节气日自动发生)
+        title: 明天春分·扳指见龙脊
+        term: 春分            # 二十四节气名(如 处暑/冬至/春分…)
+        offset_days: -1      # 相对节气日偏移:前一天=-1,最多 ±183,默认 0
+        days: 90             # 从锚点日起连续展开 N 天(1~366,默认 1);>1 时标题带 (n/N) 进度
+        time: "16:00"        # 可选:定时事件;省略则为全天
+        alarms: ["-PT10M"]
 ```
 
 ### 各类型字段速查
@@ -144,9 +175,13 @@ calendars:
 | `lunar` | `title` `lunar_month` `lunar_day` | `birth_year` `kind` `note` `time` `alarms` `alarm_days_before` |
 | `solar` | `title` `month` `day` | 同上公共字段 |
 | `rule` | `title` `freq`(+ 按 freq:`weekday`/`day`/`month+day`/`date`) | `start` `end` 及公共字段 |
+| `solar-term` | `title` `term`(二十四节气名) | `offset_days`(默认 0,±183)、`days`(默认 1,1~366)及公共字段 |
 
-公共可选字段(除 holidays-cn 外通用):`note`(进描述)、`time`(HH:mm,定时事件)、
+公共可选字段(除 holidays-cn 外通用):`note`(进描述)、`time`(HH:mm,定时事件,时长固定 30 分钟)、
 `alarms`(ISO8601 负时长,如 `-P1D`)、`alarm_days_before`(提前 N 天)。
+
+> 写入形态:`rule` 的 weekly/monthly(day≤28)/yearly(非 2·29)以**单条 RRULE** 写入,
+> iPhone 自动展开每次发生;月末钳制(day>28、2·29)与节气多天序列自动回退为逐日物化。
 
 ## 部署到 GitHub Pages(推荐)
 
@@ -171,27 +206,30 @@ ios-cal-sub/
 ├── src/
 │   ├── types.ts              # zod 配置校验 schema
 │   ├── dates.ts              # 日期工具(纯 UTC 语义)
-│   ├── ics.ts                # 极简 RFC 5545 ICS 写入器(折行/转义/VTIMEZONE/VALARM)
-│   ├── sources.ts            # 四类事件源展开(holidays-cn/lunar/solar/rule)
+│   ├── ics.ts                # 极简 RFC 5545 ICS 写入器(折行/转义/VTIMEZONE/VALARM/RRULE)
+│   ├── sources.ts            # 五类事件源展开(holidays-cn/lunar/solar/rule/solar-term)
 │   └── generate.ts           # 主入口:配置 → dist/*.ics + index.html + manifest.json
 ├── scripts/fetch-holidays.ts # 拉取 holiday-cn 官方数据(带缓存,离线可用)
 │   list-terms.ts             # 小工具:列出某年二十四节气的公历日期
 ├── src/web/
 │   ├── server.ts             # 局域网编辑器服务(可选,零框架依赖)
 │   └── editor.html           # 局域网单页编辑器
-├── src/editor-page.html      # ★ 在线编辑器源模板(构建时注入 dumpYaml → dist/editor/)
+├── src/editor-page.html      # ★ 在线编辑器源模板(构建时生成 editor/yaml-dump.js)
 ├── src/yaml-dump.ts          # 零依赖 YAML 序列化(Node/浏览器通用,往返已验证)
 ├── src/keygen.ts             # cal:key:生成访问密钥 UUID + SHA-256
-├── verify/verify.ts          # 验证套件(格式/回读/事实抽查/编辑器产物)
+├── verify/verify.ts          # 验证套件(格式/回读/事实抽查/配置↔产物定义级比对)
+├── docs/KNOWLEDGE-BASE.md    # 排障结论与设计规约(随手更新)
 ├── data/holiday-cn/*.json    # 节假日数据缓存(提交入库,保证构建可复现)
-├── dist/                     # 生成产物:*.ics + index.html + manifest.json
+├── dist/                     # 生成产物:*.ics + index.html + manifest.json + editor/
 └── .github/workflows/deploy.yml
 ```
 
 ## 设计要点(为什么这样做)
 
-- **逐日展开而非 RRULE**:iOS 对订阅日历的 RRULE 支持有限,且农历根本无法用 RRULE 表达;
-  展开成具体日期最稳,配合稳定 UID 更新无副作用
+- **RRULE 与逐日物化按语义选型**(判定表见 docs/KNOWLEDGE-BASE.md §12):
+  周/月/年循环 = 单条 `RRULE:FREQ=...;UNTIL=...`,iPhone 自动展开;
+  节气多天序列物化为逐日独立事件——单条 RRULE 的标题无法逐日变化,
+  `(n/N)` 进度后缀需要独立事件承载;农历无法用任何 RRULE 表达,必须物化
 - **UID = sha1(日历ID+逻辑键+日期)**:确定性生成,重复构建不漂移
 - **DTSTAMP 按小时取整**(或用 `SOURCE_DATE_EPOCH` 固定):减少 git 无意义抖动
 - **验证脚本独立于生成器**:用第三方库(ts-ics)回读解析,避免"自己写自己验"的盲区;
@@ -211,7 +249,18 @@ ios-cal-sub/
 可自行修改 `src/sources.ts` 中 `expandHolidaysCn` 的 alarms 值。
 
 **Q:iOS 会同步多久以后的事件?**
-Apple 未公开窗口长度,实测约一年内可靠。本工具默认展开 `years_ahead: 2` 年以留足余量。
+本工具生成的窗口是「当年 1 月 1 日 ~ 今年+N 年年末」(N = `years_ahead`,默认 2),
+过去部分用于回顾全年序列。Apple 对超大文件的实测限制未公开,2 年余量足够日常使用。
+
+**Q:订阅的事件到点不响铃 / 事件详情里"提醒"显示"无"?**
+iOS 会忽略订阅源文件内的提醒指令(所有 .ics 订阅都一样)。
+解决:设置 → 应用 → 日历 → **默认提醒时间** → 「日程」改为「日程开始时」,
+详见上文「🔔 让提醒真正响铃」。重要事项也可以点开单条事件手动设提醒(本地保存有效)。
+
+**Q:固定循环日历里怎么只有一条事件?**
+周/月/年循环以单条 RFC 5545 RRULE 定义写入,iPhone 自动展开为每次发生——
+这是特性不是丢失。少数形态(day>28 的月末钳制、2 月 29 日)会退回逐日展开。
 
 **Q:能加节气/节日(如母亲节"五月的第二个星期日")吗?**
-目前未内置"第 N 个星期几"规则,可先用近似日期,或欢迎扩展 `rule` 类型。
+节气锚定用 `solar-term` 源;母亲节这类"第 N 个星期几"规则暂未内置,
+可先用近似日期,或欢迎扩展 `rule` 类型。
