@@ -403,35 +403,38 @@ export function expandSolarTerm(
   const termDates = all.get(src.term) ?? [];
   const out: Occurrence[] = [];
   for (const d of termDates) {
-    // 锚点 = 节气日 + 偏移;序列 [锚点, 锚点+days-1]
     const anchor = addDays(d, src.offset_days);
     const lastDay = addDays(anchor, src.days - 1);
-    // 序列与窗口有交集才生成(允许 DTSTART 略早于窗口起点的进行中序列)
+    // 序列与窗口有交集才生成
     if (cmpDate(lastDay, win.start) < 0 || cmpDate(anchor, win.end) > 0) continue;
 
-    const offsetText =
-      src.offset_days === 0 ? '' : `${src.term}${src.offset_days > 0 ? '后' : '前'}第 ${Math.abs(src.offset_days)} 天`;
-    const descParts: string[] = [];
-    if (src.days > 1)
-      descParts.push(`每年${offsetText || src.term}开始,连续 ${src.days} 天(订阅端按 RRULE 自动展开)`);
-    else descParts.push(offsetText || `节气日:${src.term}`);
-    if (src.note) descParts.push(src.note);
-
-    const occ: Occurrence = {
-      uid: makeUid(calId, `term-${src.term}-${src.offset_days}`, anchor.slice(0, 4)),
-      start: anchor,
-      end: addDays(anchor, src.days),
-      time: src.time ?? null,
-      summary: `⛅ ${src.title}`,
-      description: descParts.join(' | '),
-      alarms: mergeAlarms(src),
-    };
-    if (src.days > 1) {
-      // 每年一条 + 每日重复 N 次:语义即"每年该节气都有,往后连续 N 天"
-      occ.rrule = `FREQ=DAILY;COUNT=${src.days}`;
-      occ.end = addDays(anchor, src.days); // 全天事件排他 DTEND=末日后一天
+    // 多天序列物化为逐日独立事件:标题携带 (n/N) 进度、UID 按日期稳定。
+    // (曾试过每年一条 + RRULE:FREQ=DAILY;COUNT=N,但单条定义的 SUMMARY 无法逐日变化,
+    //  用户裁定进度数字优先 —— 见 docs/KNOWLEDGE-BASE.md §12)
+    for (let i = 0; i < src.days; i++) {
+      const date = addDays(anchor, i);
+      const descParts: string[] = [];
+      descParts.push(
+        src.days > 1 ? `${src.term}起第 ${i + 1}/${src.days} 天` : `节气日:${src.term}`,
+      );
+      if (src.offset_days !== 0 && src.days === 1)
+        descParts.push(`${src.term}${src.offset_days > 0 ? '后' : '前'}第 ${Math.abs(src.offset_days)} 天`);
+      else if (src.offset_days !== 0)
+        descParts.push(`起点:${src.term}${src.offset_days > 0 ? '后' : '前'}第 ${Math.abs(src.offset_days)} 天`);
+      if (src.note) descParts.push(src.note);
+      out.push({
+        uid: makeUid(calId, `term-${src.term}-${src.offset_days}`, date),
+        start: date,
+        end: addDays(date, 1),
+        time: src.time ?? null,
+        summary:
+          src.days > 1
+            ? `⛅ ${src.title}(${i + 1}/${src.days})`
+            : `⛅ ${src.title}`,
+        description: descParts.join(' | '),
+        alarms: mergeAlarms(src),
+      });
     }
-    out.push(occ);
   }
   return out;
 }
