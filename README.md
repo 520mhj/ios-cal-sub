@@ -37,29 +37,45 @@ pnpm cal:key      # (可选)生成在线编辑器的访问密钥 UUID + 哈希
 部署后打开 `https://你的用户名.github.io/仓库名/editor/`,手机/电脑浏览器里
 点选式增删改事件,**保存直接提交回仓库**,CI 自动重建发布(约 1 分钟后订阅端可见)。
 
-### 首次启用三步
+### 首次启用(Fork 后一次配好)
 
-1. **生成访问密钥**:`pnpm cal:key` → 得到一个 UUID(自行保管)和它的 SHA-256
-2. **配置仓库 Secret**(零提交,立即对下次构建生效):
-   GitHub 仓库 → Settings → Secrets and variables → Actions:
-   - **Secrets**: `CAL_EDITOR_KEY_SHA256` = 哈希值
-   - **Variables**: `CAL_SITE_BASE_URL` = `https://你的用户名.github.io/仓库名`(订阅页链接用)
-3. 打开 `/editor/` 会看到 🔐 锁屏,输入 UUID 解锁;点右上角 **🔑 GitHub 设置**:
-   填 Owner/Repo/分支(从 github.io 地址自动识别)+ **Fine-grained PAT**(仅授予该仓库 Contents 读写)
+1. **生成访问密钥**:本地运行 `pnpm cal:key` → 得到一个 UUID,妥善自存
+2. **把 UUID 原样存入仓库 Secret**(零提交,下次构建即生效):
+   GitHub 仓库 → Settings → Secrets and variables → Actions → **Secrets** 标签 →
+   New repository secret → Name 填 `CAL_EDITOR_KEY`,Value 填那个 UUID
+3. 打开 `/editor/`,锁屏输入该 UUID 解锁
 
-之后日常就是:解锁 → 加/改事件 → 「🚀 保存到 GitHub」→ 等 CI 绿勾 → iPhone 刷新订阅。
+> 构建时自动把 UUID 算成 SHA-256 写入站点校验文件——UUID 本身不进仓库、不出现在任何公开页面。
 
-> 站点地址与密钥哈希通过 Actions Variables/Secrets 注入构建(`CAL_SITE_BASE_URL`
-> / `CAL_EDITOR_KEY_SHA256` / 可选 `CAL_EDITOR_HINT`),不进代码仓库;
-> `calendars.yaml` 的同名字段仅作为本地构建的可选兜底。
+### 获取 GitHub Token(PAT)——编辑器保存修改用
+
+订阅日历是只读看板,想把网页里的修改保存回仓库,需要一个你自己签发的 Token:
+
+```
+GitHub 右上角头像 → Settings
+→ 左栏最底 Developer settings
+→ Personal access tokens → Fine-grained tokens → Generate new token
+├─ Token name        : ios-cal-sub-editor(随意)
+├─ Expiration        : 建议 90 days(到期换新的贴回编辑器即可)
+├─ Resource owner    : 你的用户名
+├─ Repository access : Only select repositories → 勾选 fork 出来的这个仓库
+├─ Permissions → Repository permissions → Contents → Read and write
+└─ Generate token → 立刻复制 github_pat_ 开头的长串(只显示这一次!)
+```
+
+回到编辑器:右上角 **🔑 GitHub 设置** → Owner/Repo/分支会自动识别,
+粘贴 Token → 勾选「在本机记住」→ 确定。之后:**加/改事件 → 🚀 保存到 GitHub → 等 CI 绿勾 → iPhone 刷新订阅**。
+
+> Token 只存在你浏览器的 localStorage;泄露随时去 Developer settings 里 Delete。
+> 忘记访问密钥(UUID)?重新 `pnpm cal:key` 换一个,更新 Secret 即可,无需任何提交。
 
 ### 安全模型(重要)
 
 | 层 | 机制 | 说明 |
 |---|---|---|
-| 编辑页门禁 | UUID 的 SHA-256 校验 | 只防"偷看"编辑界面;**哈希存于 Actions Secret**,不进 git 历史也不出现在公开产物(UUID v4 有 122 位熵,不可暴力) |
-| 真正的写权限 | GitHub Fine-grained PAT | 只授予这一个仓库的 Contents 读写;Token 仅存于你浏览器的 localStorage(可勾选不记住) |
-| 数据公开边界 | `data.json` 与 `.ics` 本身公开 | 能订阅就能看内容;若生日等高度敏感,请勿使用公开 Pages,或接受"知道 URL 即可订阅"的现实 |
+| 编辑页门禁 | UUID 比对(UUID 存 Secret,站点只有其 SHA-256) | 只防"偷看"编辑界面;UUID 本身不进 git 历史也不出现在公开产物(UUID v4 有 122 位熵,不可暴力) |
+| 真正的写权限 | GitHub Fine-grained PAT | 只授予这一个仓库的 Contents 读写;Token 仅存于你浏览器的 localStorage |
+| 数据公开边界 | `data.json` 与 `.ics` 本身公开 | 能订阅就能看内容;高度敏感内容请配合下方的订阅地址保护,或勿用公开 Pages |
 
 - 忘记 UUID:重新 `pnpm cal:key`,把新哈希更新到 Secret 即可(无需任何提交)
 - Token 泄露:GitHub → Settings → Developer settings 里立即 revoke
@@ -109,9 +125,6 @@ iPhone 设置 → 应用 → 日历 → 默认提醒时间
 - 定时事件在**开始时刻**触发(本工具生成的定时事件时长固定 30 分钟,
   如 9:30 的事件在 9:30–10:00 这个区间内提醒);
 - 全天事件(节假日/生日)按你给「全天事件」配的时间触发。
-
-备选方案:① 点开单条事件手动选提醒(本地保存,对订阅事件也有效);
-② 用「快捷指令 → 自动化」把当天订阅事件转成提醒事项,实现精确到分钟的自动铃声。
 
 ## 配置参考(calendars.yaml)
 
@@ -183,20 +196,39 @@ calendars:
 > 写入形态:`rule` 的 weekly/monthly(day≤28)/yearly(非 2·29)以**单条 RRULE** 写入,
 > iPhone 自动展开每次发生;月末钳制(day>28、2·29)与节气多天序列自动回退为逐日物化。
 
-## 部署到 GitHub Pages(推荐)
+## 部署到 GitHub Pages(Fork 即用,推荐)
 
-1. 在 GitHub 新建仓库(或 private→public,GitHub Pages 免费版需公开仓库),push 本项目
+1. **Fork 本项目**到你的 GitHub 账号(右上角 Fork 按钮)
 2. 仓库 **Settings → Pages → Build and deployment → Source 选 GitHub Actions**
-3. 推送到 `main` 即触发首次部署;此后**每天北京时间 09:00 自动重建**
-4. 部署完成后,在仓库 **Settings → Secrets and variables → Actions → Variables** 新建
-   `CAL_SITE_BASE_URL` = `https://用户名.github.io/仓库名`(下次构建起订阅链接可用)
+3. 按下表配好 Variables / Secrets(都在 Settings → Secrets and variables → Actions):
+4. Actions 页选 "Build & Deploy Calendars" → **Run workflow** 手动跑第一次(此后 push 与每日 09:00 自动构建)
+
+| 类型 | Name | 值 | 必填 |
+|---|---|---|---|
+| Variable | `CAL_SITE_BASE_URL` | `https://你的用户名.github.io/仓库名` | 推荐 |
+| Secret | `CAL_EDITOR_KEY` | `pnpm cal:key` 生成的 UUID 原样 | 用在线编辑器则必填 |
+| Variable | `CAL_EDITOR_HINT` | 锁屏提示语 | 可选 |
+| Variable | `CAL_SUBSCRIBE_KEY` | 订阅保护密钥(≥8 位) | 可选,**配置即开启保护** |
+
+### 🔐 订阅地址保护(可选开关)
+
+静态托管无法做服务端鉴权,本工具用「能力地址」实现:
+
+- **关闭**(默认):不配置 `CAL_SUBSCRIBE_KEY`,知道订阅地址即可使用;
+- **开启**:配置该变量后重新构建,`.ics` 会移入不可猜测的
+  `/s/<令牌>/日历名.ics` 路径(根目录不留副本),首页的订阅按钮变为
+  🔒 状态——在页面输入密钥后才生成专属链接。密钥只在浏览器本地计算,
+  不发送到任何服务器。
+- 每个日历的令牌独立派生(`sha256(密钥|日历ID)`),泄露一个日历的链接
+  不影响其他日历;轮换密钥 = 改变量重跑构建,iPhone 删除旧订阅重新添加即可。
+- iPhone 使用:打开首页 → 输入密钥 → 点生成的「📲 订阅」按钮。
 
 ### 自动更新机制
 
 - 国务院通常每年 11~12 月发布次年放假安排 → holiday-cn 当天收录 →
   下一次定时构建自动拉取并重新生成 → 你的 iPhone 订阅**无需任何操作**即可看到新一年安排
 - 在公告发布前,未来年份的数据文件是空占位(`days: []`),构建时会明确提示,属正常现象
-- 改了 `calendars.yaml` 后 push 即生效;本地改完也可以手动跑 `pnpm cal:all`
+- 在线编辑器保存、或本地改完 `calendars.yaml` push,都会立即触发重建
 
 ## 目录结构
 
