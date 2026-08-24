@@ -123,6 +123,15 @@ export const calendarSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   sources: z.array(sourceSchema).min(1, '每个日历至少要有一个 sources'),
+  /**
+   * 订阅方式:
+   *   public  —— 订阅页公开展示链接(默认)
+   *   private —— 首页不展示;.ics 写入 /s/<令牌>/ 路径,
+   *              令牌 = sha256(访问密钥SHA-256 + '|' + id) 前 32 位,
+   *              专属链接在编辑页对应日历区域查看/复制。
+   *              私密要求已配置访问密钥(CAL_EDITOR_KEY),否则构建报错。
+   */
+  access: z.enum(['public', 'private']).default('public'),
 });
 
 /** 在线编辑器的访问门禁:UUID 本身绝不入库,只存其 SHA-256 */

@@ -56,19 +56,14 @@ export function loadConfig(cfgPath: string): AppConfig {
   return parsed.data;
 }
 
-function indexHtml(
-  cfg: AppConfig,
-  rows: BuildSummaryRow[],
-  generatedAt: string,
-  prot: SubscribeProtection,
-): string {
+function indexHtml(cfg: AppConfig, rows: BuildSummaryRow[], generatedAt: string): string {
   const base = cfg.site_base_url?.replace(/\/+$/, '') ?? '';
   const host = base.replace(/^https?:\/\//, '');
 
-  // 受保护模式:卡片不直接给出链接,页面底部输入密钥后本地计算令牌再生成
-  const subscribeBtn = (r: { id: string; file: string }) => {
-    if (prot.on) {
-      return `<span id="sl-${escapeHtml(r.id)}"><span class="btn disabled">🔒 输入密钥后显示</span></span>`;
+  // 公开日历:直接给链接;私密日历:首页只显示 🔒 徽标,专属链接在编辑页对应区域查看
+  const subscribeArea = (r: BuildSummaryRow) => {
+    if (r.access === 'private') {
+      return `<span class="btn disabled" title="私密订阅 · 链接在编辑页该日历区域查看">🔒 私密订阅</span>`;
     }
     return base
       ? `<a class="btn" href="webcal://${host}/${r.file}">📲 订阅(webcal)</a>`
@@ -79,42 +74,17 @@ function indexHtml(
       (r) => `  <div class="card">
     <h2>${escapeHtml(r.name)}</h2>
     <p class="meta">${r.count} 个事件 · 覆盖 ${r.first} ~ ${r.last}</p>
-    <p>${subscribeBtn(r)}</p>
-    <code id="cu-${escapeHtml(r.id)}">${escapeHtml(prot.on ? '🔒 已保护' : base ? `${base}/${r.file}` : r.file)}</code>
+    <p>${subscribeArea(r)}</p>
+    <code>${escapeHtml(
+      r.access === 'private'
+        ? '🔒 私密日历 · 专属链接请在编辑页对应日历处复制'
+        : base
+          ? `${base}/${r.file}`
+          : r.file,
+    )}</code>
   </div>`,
     )
     .join('\n');
-
-  const unlockBlock = prot.on
-    ? `<div class="card" data-subscribe-protected>
-    <h2>🔒 本站已开启订阅保护</h2>
-    <p class="meta">输入订阅密钥后,下方为每个日历生成专属订阅链接(密钥只在本机使用,不会发送)。</p>
-    <p><input id="subkey" type="password" placeholder="订阅密钥" style="padding:8px;border-radius:9px;border:1px solid #8886">
-       <button class="btn" style="border:0;cursor:pointer" onclick="unlock()">显示订阅链接</button></p>
-  </div>
-  <script data-subscribe-protected>
-  async function subTok(key,id){
-    const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key+'|'+id));
-    return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,32);
-  }
-  async function unlock(){
-    const k=(document.getElementById('subkey').value||'').trim();
-    if(!k){alert('请输入订阅密钥');return}
-    try{sessionStorage.setItem('subKey',k)}catch(e){}
-    const ids=${JSON.stringify(rows.map((r) => r.id))};
-    for(const id of ids){
-      const t=await subTok(k,id);
-      const rel='s/'+t+'/'+id+'.ics';
-      const url='${host}'?'webcal://${host}/'+rel:rel;
-      const el=document.getElementById('sl-'+id);
-      if(el)el.innerHTML='<a class="btn" href="'+url+'">📲 订阅(webcal)</a>';
-      const cu=document.getElementById('cu-'+id);
-      if(cu)cu.textContent='${host}'?'https://${host}/'+rel:rel;
-    }
-  }
-  (function(){try{if(sessionStorage.getItem('subKey')){document.getElementById('subkey').value=sessionStorage.getItem('subKey');unlock()}}catch(e){}})();
-  </script>`
-    : '';
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -140,7 +110,6 @@ function indexHtml(
 <h1>📅 iOS 日历订阅</h1>
 <p>在 iPhone 上打开本页,点「订阅(webcal)」即可;或在 <b>设置 → 应用 → 日历 → 日历账户 → 添加订阅日历</b> 中粘贴下方链接。</p>
 ${cards}
-${unlockBlock}
 <footer>由 ios-cal-sub 生成于 ${escapeHtml(generatedAt)}。数据来源:<a href="https://github.com/NateScarlet/holiday-cn">NateScarlet/holiday-cn</a>(国务院公告自动化解析)。</footer>
 </body>
 </html>`;
@@ -180,32 +149,17 @@ export function resolveConfig(cfg: AppConfig): AppConfig {
   return out;
 }
 
-/** ---------- 订阅地址保护(capability URL) ---------- */
-
-export interface SubscribeProtection {
-  /** true 时 *.ics 写入不可猜测的 /s/<token>/ 路径,根目录不留副本 */
-  on: boolean;
-  key: string;
-}
-
-/** 订阅令牌:按日历独立派生,泄露单个日历链接不影响其他日历 */
-export function subscribeToken(key: string, calId: string): string {
-  return createHash('sha256').update(`${key}|${calId}`).digest('hex').slice(0, 32);
-}
+/** ---------- 私密订阅(capability URL,按日历独立) ---------- */
 
 /**
- * 开关 = 是否配置了 Variable `CAL_SUBSCRIBE_KEY`:
- *   不配置 → 关闭,订阅地址即全部凭据;
- *   配置(≥8 位)→ 开启,.ics 移入 /s/<令牌>/ 路径,首页需输入密钥才显示链接。
+ * 私密日历的订阅令牌:
+ *   token = sha256( 访问密钥的SHA-256十六进制 + '|' + calId ) 前 32 位
+ * 双重派生的原因:构建端手里是密钥的哈希(eff.editor_auth.key_sha256),
+ * 编辑页浏览器端从 UUID 出发同样先算哈希即可得到同一材料,两端无需传递明文。
+ * 每个日历独立令牌:泄露一个链接不影响其他日历;轮换密钥则全部私密链接失效。
  */
-export function readSubscribeProtection(): SubscribeProtection {
-  const key = (process.env.CAL_SUBSCRIBE_KEY ?? '').trim();
-  if (!key) return { on: false, key: '' };
-  if (key.length < 8) {
-    console.warn('⚠️ CAL_SUBSCRIBE_KEY 少于 8 位,强度不足,已忽略(不开启保护)');
-    return { on: false, key: '' };
-  }
-  return { on: true, key };
+export function privateSubscribeToken(keySha256Hex: string, calId: string): string {
+  return createHash('sha256').update(`${keySha256Hex}|${calId}`).digest('hex').slice(0, 32);
 }
 
 export interface BuildSummaryRow {
@@ -215,6 +169,8 @@ export interface BuildSummaryRow {
   count: number;
   first: string;
   last: string;
+  /** public = 首页公开展示链接;private = 首页隐藏,.ics 位于 /s/<令牌>/ 路径 */
+  access: 'public' | 'private';
 }
 
 export interface BuildOptions {
@@ -252,13 +208,11 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
   const stamp = stampUtcNow();
   const generatedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const summaryRows: BuildSummaryRow[] = [];
-  const prot = readSubscribeProtection();
-
-  // 开启订阅保护时,清理根目录可能残留的明文 .ics(上次未开保护时生成的)
-  if (prot.on) {
-    for (const f of await fs.promises.readdir(outDir)) {
-      if (f.endsWith('.ics')) await fs.promises.unlink(path.join(outDir, f));
-    }
+  // /s/ 目录与根目录 .ics 完全由本次构建重建:
+  // 先清理,避免「日历从公开切到私密」后旧的明文副本残留在根目录造成泄露
+  await fs.promises.rm(path.join(outDir, 's'), { recursive: true, force: true });
+  for (const f of await fs.promises.readdir(outDir)) {
+    if (f.endsWith('.ics')) await fs.promises.unlink(path.join(outDir, f));
   }
 
   for (const cal of cfg.calendars) {
@@ -273,11 +227,20 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
       { name: cal.name, description: descParts.join(' | '), timezone: cfg.defaults.timezone, stampUtc: stamp },
       occs,
     );
+
+    // 私密日历:.ics 写入不可猜测的 /s/<令牌>/ 路径;公开日历:根目录
     let file = `${cal.id}.ics`;
-    const icsPath = prot.on
-      ? path.join(outDir, 's', subscribeToken(prot.key, cal.id), `${cal.id}.ics`)
-      : path.join(outDir, file);
-    if (prot.on) file = `s/${subscribeToken(prot.key, cal.id)}/${cal.id}.ics`;
+    if (cal.access === 'private') {
+      const keySha = eff.editor_auth?.key_sha256;
+      if (!keySha) {
+        throw new Error(
+          `日历「${cal.name}」(${cal.id})为私密订阅,但未配置访问密钥。` +
+            `请先设置 Secret CAL_EDITOR_KEY(UUID),或在编辑页把该日历改回公开。`,
+        );
+      }
+      file = `s/${privateSubscribeToken(keySha, cal.id)}/${cal.id}.ics`;
+    }
+    const icsPath = path.join(outDir, file);
     await fs.promises.mkdir(path.dirname(icsPath), { recursive: true });
     await fs.promises.writeFile(icsPath, ics, 'utf8');
 
@@ -289,18 +252,19 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
       count: occs.length,
       first: occs[0]?.start ?? '-',
       last: occs[occs.length - 1]?.start ?? '-',
+      access: cal.access,
     };
     summaryRows.push(row);
     if (opts.log !== false) {
       console.log(
-        `✅ ${file.padEnd(22)} ${String(row.count).padStart(4)} 个事件(${countWithAlarms} 带提醒)  ${row.first} ~ ${row.last}`,
+        `✅ ${file.padEnd(22)} ${String(row.count).padStart(4)} 个事件(${countWithAlarms} 带提醒)  ${row.first} ~ ${row.last}${cal.access === 'private' ? '  🔒私密' : ''}`,
       );
     }
   }
 
   await fs.promises.writeFile(
     path.join(outDir, 'index.html'),
-    indexHtml(eff, summaryRows, generatedAt, prot),
+    indexHtml(eff, summaryRows, generatedAt),
     'utf8',
   );
   await fs.promises.writeFile(

@@ -205,20 +205,24 @@ console.log('\n━━ 4. 配置 ↔ 产物全量一致性 ━━');
 console.log('\n━━ 5. index.html / manifest 一致性 ━━');
 {
   const html = fs.readFileSync(path.join(distDir, 'index.html'), 'utf8');
-  const protectedMode = manifest.calendars.some((c) => c.file.includes('/'));
-  if (protectedMode) {
-    if (html.includes('data-subscribe-protected'))
-      pass('订阅保护已开启:index.html 含密钥解锁入口,未泄露任何明文链接');
-    else fail('订阅保护已开启,但 index.html 缺少解锁入口标记');
+  const privRows = manifest.calendars.filter((c) => c.file.includes('/'));
+  const pubRows = manifest.calendars.filter((c) => !c.file.includes('/'));
 
-    const leaked = manifest.calendars.filter((c) => fs.existsSync(path.join(distDir, `${c.id}.ics`)));
-    if (leaked.length === 0) pass('根目录无明文 .ics 残留');
-    else fail(`根目录仍存在明文文件:${leaked.map((c) => c.id).join(', ')}`);
-  } else {
-    const missingLink = manifest.calendars.filter((c) => !html.includes(c.file));
-    if (missingLink.length === 0) pass('index.html 包含全部日历链接');
-    else fail(`index.html 缺少链接:${missingLink.map((c) => c.id).join(', ')}`);
+  // 公开日历:首页应有链接
+  const missingLink = pubRows.filter((c) => !html.includes(c.file));
+  if (pubRows.length === 0) console.log('   (无公开日历)');
+  else if (missingLink.length === 0) pass(`公开日历链接完整(${pubRows.length} 个)`);
+  else fail(`index.html 缺少公开链接:${missingLink.map((c) => c.id).join(', ')}`);
+
+  // 私密日历:根目录无明文文件、首页不出现其路径
+  for (const c of privRows) {
+    if (fs.existsSync(path.join(distDir, `${c.id}.ics`)))
+      fail(`私密日历 ${c.id} 在根目录存在明文副本(泄露!)`);
+    if (html.includes(`${c.id}.ics`))
+      fail(`index.html 泄露了私密日历 ${c.id} 的路径`);
   }
+  if (privRows.length > 0 && failures === 0)
+    pass(`私密日历 ${privRows.length} 个:仅存于 /s/<令牌>/ 路径,首页未展示`);
 }
 
 console.log('\n━━ 6. 在线编辑器产物(Pages /editor/)━━');

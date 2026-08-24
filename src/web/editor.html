@@ -187,6 +187,11 @@ function renderCal() {
           <input id="calName" value="${esc(c.name)}"></label>
         <label class="f" style="flex:3;min-width:220px"><span>描述(可选)</span>
           <input id="calDesc" value="${esc(c.description ?? '')}"></label>
+        <label class="f" style="min-width:150px"><span>订阅方式</span>
+          <select id="calAccess">
+            <option value="public" ${c.access !== 'private' ? 'selected' : ''}>🌐 公开</option>
+            <option value="private" ${c.access === 'private' ? 'selected' : ''}>🔒 私密</option>
+          </select></label>
         <button class="btn danger small" id="delCalBtn">删除日历</button>
       </div>
     </div>
@@ -212,6 +217,10 @@ function renderCal() {
     </div>`;
   $('calName').onchange = (e) => { cfg.calendars[active].name = e.target.value.trim() || c.name; renderTabs(); };
   $('calDesc').onchange = (e) => { const d = e.target.value.trim(); if (d) cfg.calendars[active].description = d; else delete cfg.calendars[active].description; };
+  $('calAccess').onchange = (e) => {
+    cfg.calendars[active].access = e.target.value;
+    if (e.target.value === 'private') alert('私密日历的订阅专属链接,请在部署后的在线编辑器对应日历处查看(本地无密钥材料)。');
+  };
   $('delCalBtn').onclick = () => {
     if (!confirm(`确定删除日历「${c.name}」及其全部 ${c.sources.length} 个事件?`)) return;
     cfg.calendars.splice(active, 1);

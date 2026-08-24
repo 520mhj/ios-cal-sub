@@ -27,6 +27,10 @@
   .btn.danger { background:transparent; color:var(--danger); border:1px solid var(--danger); }
   .btn.small { padding:4px 10px; font-size:13px; }
   .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
+  .segbtn { padding:6px 16px; font-size:13px; background:transparent; color:var(--muted);
+            border:0; cursor:pointer; user-select:none; }
+  .segbtn.on { background:var(--accent); color:#fff; }
   .tabs { display:flex; gap:8px; flex-wrap:wrap; margin:4px 0 16px; }
   .tab { padding:7px 14px; border-radius:999px; border:1px solid var(--line);
          background:var(--card); cursor:pointer; font-size:14px; user-select:none; }
@@ -168,10 +172,23 @@ async function tryUnlock(){
   const h = await sha256Hex(v);
   if (h === auth.sha256) {
     sessionStorage.setItem('ics_unlocked', h);
+    sessionStorage.setItem('ics_edit_key', v.trim().toLowerCase()); // 私密订阅链接的派生材料,仅存本机
     $('lock').style.display='none';
     toast('✅ 已解锁');
     if (window._unlockResolve){ window._unlockResolve(); window._unlockResolve=null; }
   } else { toast('密钥不对,再试试', true); }
+}
+/* 私密订阅令牌(与构建端一致):sha256( sha256(UUID)hex + '|' + calId ) 前32位 */
+async function subTokenFor(calId){
+  const k=sessionStorage.getItem('ics_edit_key');
+  if(!k) return null;
+  const h1=await sha256Hex(k);
+  const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(h1+'|'+calId));
+  return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,32);
+}
+function siteBase(){
+  if(cfg?.site_base_url) return cfg.site_base_url.replace(/\/+$/,'');
+  return location.href.split('/editor')[0]; // 部署后从地址推断
 }
 
 /* ---------- 加载 ---------- */
@@ -239,6 +256,7 @@ function renderTabs(){
 function renderCal(){
   const c=cfg.calendars[active];
   const panel=$('calPanel');
+  const priv=c.access==='private';
   panel.innerHTML=`
     <div class="cardbox"><div class="row">
       <label class="f" style="flex:2;min-width:170px"><span><b>日历名称</b>(iPhone 显示)</span>
@@ -246,7 +264,17 @@ function renderCal(){
       <label class="f" style="flex:3;min-width:200px"><span>描述(可选)</span>
         <input id="calDesc" value="${esc(c.description??'')}"></label>
       <button class="btn danger small" id="delCalBtn">删除日历</button>
-    </div></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="f"><span><b>订阅方式</b></span>
+        <div class="seg" id="accSeg">
+          <button type="button" class="segbtn ${priv?'':'on'}" data-acc="public">🌐 公开</button>
+          <button type="button" class="segbtn ${priv?'on':''}" data-acc="private">🔒 私密</button>
+        </div>
+      </div>
+    </div>
+    <div id="accNote"></div>
+    </div>
     <div class="cardbox">
       ${c.sources.map((s,i)=>`
       <div class="ev">
@@ -274,6 +302,31 @@ function renderCal(){
     cfg.calendars[active].sources.splice(Number(b.dataset.del),1); render(); });
   panel.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>moveSrc(Number(b.dataset.up),-1));
   panel.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>moveSrc(Number(b.dataset.down),1));
+  // 订阅方式开关
+  $('accSeg').querySelectorAll('.segbtn').forEach(b=>b.onclick=async()=>{
+    const acc=b.dataset.acc;
+    if(acc===cfg.calendars[active].access) return;
+    cfg.calendars[active].access=acc;
+    renderCal();
+    if(acc==='private') await fillPrivateLink();
+    toast(acc==='private'?'🔒 已设为私密:保存后首页将隐藏该日历链接':'🌐 已设为公开');
+  });
+  if(priv) fillPrivateLink();
+}
+async function fillPrivateLink(){
+  const c=cfg.calendars[active]; const note=$('accNote'); if(!note) return;
+  const tok=await subTokenFor(c.id);
+  if(!tok){
+    note.innerHTML='<p class="hint">⚠️ 当前会话没有密钥材料(未启用访问密钥或刚清空会话)。重新解锁一次即可生成私密链接。</p>'; return;
+  }
+  const url=`${siteBase()}/s/${tok}/${c.id}.ics`;
+  note.innerHTML=`<p class="hint" style="margin-top:8px">私密订阅专属链接(发给家人即订;iPhone 里粘贴到「添加订阅日历」):</p>
+    <div class="row" style="gap:8px">
+      <input readonly value="${esc(url)}" style="flex:1;font-size:12px;padding:7px;border-radius:8px;border:1px solid #8886;color:inherit;background:transparent">
+      <button class="btn small" id="copySub">📋 复制</button>
+    </div>
+    <p class="hint">令牌按日历独立派生,泄露此链接不影响其他日历;轮换访问密钥会使所有私密链接失效(重新复制新链即可)。</p>`;
+  $('copySub').onclick=()=>{ navigator.clipboard.writeText(url).then(()=>toast('已复制'),()=>toast('复制失败,请手动选择',true)); };
 }
 function moveSrc(i,d){ const a=cfg.calendars[active].sources; [a[i],a[i+d]]=[a[i+d],a[i]]; render(); }
 function render(){ if(!cfg)return; renderTabs(); renderCal(); }
