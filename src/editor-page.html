@@ -125,14 +125,17 @@
 <script>
 'use strict';
 const TYPES = {
-  'lunar':       { icon:'🌙', label:'农历生日 / 纪念日' },
-  'solar':       { icon:'📌', label:'固定公历日期' },
-  'rule':        { icon:'⏰', label:'周期规则' },
-  'solar-term':  { icon:'⛅', label:'节气事件' },
-  'holidays-cn': { icon:'🇨🇳', label:'节假日数据源' },
+  'lunar':          { icon:'🌙', label:'农历生日 / 纪念日' },
+  'solar':          { icon:'📌', label:'固定公历日期' },
+  'rule':           { icon:'⏰', label:'周期规则' },
+  'solar-term':     { icon:'⛅', label:'节气事件' },
+  'lunar-festival': { icon:'🏮', label:'农历传统节日' },
+  'holidays-cn':    { icon:'🇨🇳', label:'节假日数据源' },
 };
 const TERMS = ['立春','雨水','惊蛰','春分','清明','谷雨','立夏','小满','芒种','夏至','小暑','大暑',
                '立秋','处暑','白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至','小寒','大寒'];
+const LUNAR_FESTIVALS = ['元宵节','龙抬头','上巳节','七夕节','中元节','中秋节',
+                         '重阳节','寒衣节','下元节','腊八节','小年','除夕'];
 const WEEKDAYS = [['mon','周一'],['tue','周二'],['wed','周三'],['thu','周四'],['fri','周五'],['sat','周六'],['sun','周日']];
 const ALARM_DAYS = [0,1,2,3,7,14];
 const CN_MONTH = ['正','二','三','四','五','六','七','八','九','十','冬','腊'];
@@ -234,6 +237,8 @@ function summarize(s){
     if (s.offset_days) p+=` ${s.offset_days>0?'+':''}${s.offset_days}天`;
     if ((s.days??1)>1) p+=` 起·连续${s.days}天`;
     parts.push(p);
+  } else if (s.type==='lunar-festival'){
+    parts.push(s.festival||'(未选节日)');
   } else if (s.type==='holidays-cn'){
     parts.push([s.include_rest_days!==false&&'放假', s.include_workdays&&'补班'].filter(Boolean).join('+')||'未选择');
   }
@@ -385,6 +390,14 @@ const FORMS={
     s.term=$('f_term').value;
     const off=Number($('f_off').value); s.offset_days=Math.max(-183,Math.min(183,Number.isFinite(off)?Math.trunc(off):0));
     const d=Number($('f_days').value); s.days=Math.max(1,Math.min(366,Number.isFinite(d)?Math.trunc(d):1));
+  },
+  'lunar-festival'(s){return `<div class="grid">
+    ${fld('节日',`<select id="f_lf" onchange="document.getElementById('f_title').value=this.value">${LUNAR_FESTIVALS.map(t=>`<option ${s.festival===t?'selected':''}>${t}</option>`).join('')}</select>`)}
+    </div>
+    <p class="hint">标题已自动取为节日名(可在上方修改);除夕自动落在腊月最后一天。</p>`;},
+  'read-lunar-festival'(s){
+    s.festival=$('f_lf').value;
+    if(!s.title) s.title=s.festival; // 未手动填则用节日名
   },
   'holidays-cn'(s){return `<div class="hint" style="margin-bottom:10px">每日历最多一个数据源,勾选要生成的类别:</div>
     <div class="chips"><span class="chip ${s.include_rest_days!==false?'on':''}" id="f_rest">🎉 放假日</span>
@@ -544,6 +557,9 @@ function validateCfg(){
           if(!TERMS.includes(s.term)) errs.push(`${at(j)} 节气名非法`);
           if(!int(s.offset_days,-183,183)) errs.push(`${at(j)} 偏移天数须为 -183~183 的整数`);
           if(!int(s.days,1,366)) errs.push(`${at(j)} 连续天数须为 1~366 的整数(当前 ${JSON.stringify(s.days)})`);
+          break;
+        case 'lunar-festival':
+          if(!LUNAR_FESTIVALS.includes(s.festival)) errs.push(`${at(j)} 节日名非法`);
           break;
       }
     });

@@ -27,6 +27,14 @@ const eventCommon = {
   alarm_days_before: z.array(z.number().int().min(0).max(365)).optional(),
 };
 
+/** title 可选的公共字段(lunar-festival 用:标题自动取节日名) */
+const eventCommonOmitTitle = {
+  note: eventCommon.note,
+  time: eventCommon.time,
+  alarms: eventCommon.alarms,
+  alarm_days_before: eventCommon.alarm_days_before,
+};
+
 /** ---------- 事件源 ---------- */
 
 export const holidaysCnSource = z.object({
@@ -98,12 +106,27 @@ export const solarTermSource = z.object({
   days: z.number().int().min(1).max(366).default(1),
 });
 
+/** 内置农历传统节日名(与 sources.ts 的 LUNAR_FESTIVALS 一一对应) */
+export const LUNAR_FESTIVAL_NAMES = [
+  '元宵节', '龙抬头', '上巳节', '七夕节', '中元节', '中秋节',
+  '重阳节', '寒衣节', '下元节', '腊八节', '小年', '除夕',
+] as const;
+
+export const lunarFestivalSource = z.object({
+  type: z.literal('lunar-festival'),
+  /** 标题自动取节日名;仍可覆盖 */
+  title: eventCommon.title.optional(),
+  festival: z.enum(LUNAR_FESTIVAL_NAMES),
+  ...eventCommonOmitTitle,
+});
+
 export const sourceSchema = z.discriminatedUnion('type', [
   holidaysCnSource,
   lunarSource,
   solarSource,
   ruleSource,
   solarTermSource,
+  lunarFestivalSource,
 ]);
 
 export type HolidayCnSource = z.infer<typeof holidaysCnSource>;
@@ -111,6 +134,7 @@ export type LunarSource = z.infer<typeof lunarSource>;
 export type SolarSource = z.infer<typeof solarSource>;
 export type RuleSource = z.infer<typeof ruleSource>;
 export type SolarTermSource = z.infer<typeof solarTermSource>;
+export type LunarFestivalSource = z.infer<typeof lunarFestivalSource>;
 export type Source = z.infer<typeof sourceSchema>;
 
 /** ---------- 日历与全局配置 ---------- */

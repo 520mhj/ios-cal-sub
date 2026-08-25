@@ -6,7 +6,8 @@
 
 | Apple 日历的痛点 | 本工具的方案 |
 |---|---|
-| 节假日日历**不显示调休补班**,容易忘记上班 | `holidays-cn` 源:补班日生成醒目的「💼 调休补班(上班)」事件 |
+| 节假日日历**不显示调休补班**,也看不出哪天过节 | `holidays-cn` 源:「🧨 春节 · 假期第1天 / 春节假期 2/9」+「💼 调休补班(上班)」 |
+| 元宵、七夕、寒衣等**传统节日** Apple 日历根本没有 | `lunar-festival` 源:内置 12 个农历节日(除夕自动落腊月末) |
 | 农历生日/纪念日要手动换算公历 | `lunar` 源:自动换算、逐年展开、可显示虚岁 |
 | 还款日、排班等循环事项无处安放 | `rule` / `solar` / `solar-term` 源:周/月/年/单次/节气锚定 |
 
@@ -145,6 +146,10 @@ calendars:
         days: 90             # 连续展开天数(1~366);>1 时标题带 (n/N) 进度
         time: "16:00"
         alarms: ["-PT10M"]
+
+      - type: lunar-festival  # 农历传统节日(内置计算,零外部数据)
+        festival: 七夕节       # 元宵节/龙抬头/上巳节/七夕节/中元节/重阳节/寒衣节/下元节/腊八节/小年/除夕
+        alarm_days_before: [0] # 标题自动取节日名;除夕自动落在腊月最后一天
 ```
 
 ### 各类型字段速查
@@ -156,6 +161,7 @@ calendars:
 | `solar` | `title` `month` `day` | 同上公共字段 |
 | `rule` | `title` `freq`(+ 按 freq:`weekday`/`day`/`month+day`/`date`) | `start` `end` 及公共字段 |
 | `solar-term` | `title` `term`(二十四节气名) | `offset_days`(±183)、`days`(1~366)及公共字段 |
+| `lunar-festival` | `festival`(内置节日名) | 公共字段(`title` 自动取节日名,可不填)|
 
 公共可选字段(除 holidays-cn 外通用):`note`(进描述)、`time`(HH:mm 定时)、
 `alarms`(ISO8601 负时长)、`alarm_days_before`(提前 N 天)。

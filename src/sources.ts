@@ -6,6 +6,7 @@ import { Lunar, LunarMonth, Solar } from 'lunar-typescript';
 import type {
   HolidayCnSource,
   HolidayCnYear,
+  LunarFestivalSource,
   LunarSource,
   Occurrence,
   RuleSource,
@@ -40,7 +41,7 @@ export function makeUid(calId: string, ...parts: (string | number)[]): string {
 }
 
 function mergeAlarms(
-  src: LunarSource | SolarSource | RuleSource | SolarTermSource,
+  src: LunarSource | SolarSource | RuleSource | SolarTermSource | LunarFestivalSource,
 ): string[] {
   const set = new Set(src.alarms ?? []);
   for (const n of src.alarm_days_before ?? []) set.add(`-P${n}D`);
@@ -110,18 +111,51 @@ export function expandHolidaysCn(
 ): Occurrence[] {
   const out: Occurrence[] = [];
   for (const yearData of data.values()) {
+    // 按「连续同名休息日」分组,算出假期总天数与第几天:
+    // 首日 = 过节那天(如「🧨 春节」),其余显示进度(如「🧨 春节假期 2/8」)
+    const offDays = yearData.days
+      .filter((d) => d.isOffDay && cmpDate(d.date, win.start) >= 0 && cmpDate(d.date, win.end) <= 0)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const groups: { name: string; days: typeof offDays }[] = [];
+    for (const d of offDays) {
+      const g = groups[groups.length - 1];
+      const prev = g?.days[g.days.length - 1];
+      if (g && prev && g.name === d.name && addDays(prev.date, 1) === d.date) g.days.push(d);
+      else groups.push({ name: d.name, days: [d] });
+    }
+    const spanByName = new Map<string, { i: number; n: number; start: string }>();
+    for (const g of groups) {
+      g.days.forEach((d, idx) =>
+        spanByName.set(d.date, { i: idx + 1, n: g.days.length, start: g.days[0]!.date }),
+      );
+    }
+
     for (const day of yearData.days) {
       if (cmpDate(day.date, win.start) < 0 || cmpDate(day.date, win.end) > 0) continue;
       if (day.isOffDay && !src.include_rest_days) continue;
       if (!day.isOffDay && !src.include_workdays) continue;
+      const emoji = festEmoji(day.name);
       if (day.isOffDay) {
+        const span = spanByName.get(day.date)!;
+        const summary =
+          span.n === 1
+            ? `${emoji} ${day.name}`
+            : span.i === 1
+              ? `${emoji} ${day.name} · 假期第1天`
+              : `${emoji} ${day.name}假期 ${span.i}/${span.n}`;
+        const descParts = [
+          span.n === 1
+            ? '法定节假日。'
+            : `法定节假日 · 假期 ${span.start} ~ ${addDays(span.start, span.n - 1)},共 ${span.n} 天(第 ${span.i} 天)。`,
+          '数据来源:NateScarlet/holiday-cn',
+        ];
         out.push({
           uid: makeUid(calId, 'holiday-cn', day.date),
           start: day.date,
           end: addDays(day.date, 1),
           time: null,
-          summary: `${festEmoji(day.name)} ${day.name} · 放假`,
-          description: '法定节假日休息日。数据来源:NateScarlet/holiday-cn',
+          summary,
+          description: descParts.filter(Boolean).join(' '),
           alarms: [],
         });
       } else {
@@ -439,6 +473,64 @@ export function expandSolarTerm(
   return out;
 }
 
+/** ---------- 农历传统节日(内置预设,零外部数据) ---------- */
+
+/** 内置传统节日:名称 → [农历月, 农历日];除夕特殊处理(腊月最后一天) */
+export const LUNAR_FESTIVALS: Record<string, { m: number; d: number | 'last' ; emoji: string }> = {
+  元宵节: { m: 1, d: 15, emoji: '🏮' },
+  龙抬头: { m: 2, d: 2, emoji: '🐉' },
+  上巳节: { m: 3, d: 3, emoji: '🌿' },
+  七夕节: { m: 7, d: 7, emoji: '💞' },
+  中元节: { m: 7, d: 15, emoji: '🕯️' },
+  中秋节: { m: 8, d: 15, emoji: '🥮' },
+  重阳节: { m: 9, d: 9, emoji: '⛰️' },
+  寒衣节: { m: 10, d: 1, emoji: '🍂' },
+  下元节: { m: 10, d: 15, emoji: '🌙' },
+  腊八节: { m: 12, d: 8, emoji: '🥣' },
+  小年: { m: 12, d: 23, emoji: '🧹' },
+  除夕: { m: 12, d: 'last', emoji: '🎆' },
+};
+
+export const LUNAR_FESTIVAL_NAMES = Object.keys(LUNAR_FESTIVALS);
+
+export function expandLunarFestival(
+  src: LunarFestivalSource,
+  win: Window,
+  calId: string,
+): Occurrence[] {
+  const preset = LUNAR_FESTIVALS[src.festival];
+  if (!preset) throw new Error(`未知传统节日:${src.festival}`);
+  const out: Occurrence[] = [];
+  // 农历年在公历年前后浮动:窗口首尾年各外扩一年,保证覆盖
+  const yStart = Number(win.start.slice(0, 4)) - 1;
+  const yEnd = Number(win.end.slice(0, 4)) + 1;
+  for (let ly = yStart; ly <= yEnd; ly++) {
+    let solar: string | null;
+    let dateText: string;
+    if (preset.d === 'last') {
+      // 除夕 = 腊月最后一天(廿九或三十)
+      const dc = LunarMonth.fromYm(ly, preset.m)?.getDayCount() ?? 30;
+      solar = lunarToSolar(ly, preset.m, dc);
+      dateText = `农历腊月${dc === 30 ? '三十' : '廿九'}`;
+    } else {
+      solar = lunarToSolar(ly, preset.m, preset.d);
+      dateText = `农历${preset.m}月${preset.d}日`;
+    }
+    if (!solar) continue;
+    if (cmpDate(solar, win.start) < 0 || cmpDate(solar, win.end) > 0) continue;
+    out.push({
+      uid: makeUid(calId, `lf-${src.festival}`, solar),
+      start: solar,
+      end: addDays(solar, 1),
+      time: src.time ?? null,
+      summary: `${preset.emoji} ${src.title || src.festival}`,
+      description: [`传统节日 · ${dateText}`, src.note].filter(Boolean).join(' | '),
+      alarms: mergeAlarms(src),
+    });
+  }
+  return out;
+}
+
 /** ---------- 总入口 ---------- */
 
 export function expandSource(
@@ -457,5 +549,7 @@ export function expandSource(
       return expandRule(src, ctx.win, ctx.calId);
     case 'solar-term':
       return expandSolarTerm(src, ctx.win, ctx.calId);
+    case 'lunar-festival':
+      return expandLunarFestival(src, ctx.win, ctx.calId);
   }
 }
