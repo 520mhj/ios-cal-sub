@@ -106,10 +106,11 @@ export const solarTermSource = z.object({
   days: z.number().int().min(1).max(366).default(1),
 });
 
-/** 内置农历传统节日名(与 sources.ts 的 LUNAR_FESTIVALS 一一对应) */
+/** 内置传统节日名(与 sources.ts 的 LUNAR_FESTIVALS 一一对应;冬至为节气锚定) */
 export const LUNAR_FESTIVAL_NAMES = [
   '元宵节', '龙抬头', '上巳节', '七夕节', '中元节', '中秋节',
-  '重阳节', '寒衣节', '下元节', '腊八节', '小年', '除夕',
+  '重阳节', '寒衣节', '下元节', '腊八节', '冬至',
+  '小年(北方)', '小年(南方)', '除夕',
 ] as const;
 
 export const lunarFestivalSource = z.object({

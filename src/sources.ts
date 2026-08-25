@@ -103,6 +103,30 @@ export async function loadHolidayData(
   return map;
 }
 
+/**
+ * 法定假期里"真正的节日当天"解析:名称匹配到哪条规则,就用它算出当年的节日公历日。
+ * 例如春节假期可能从除夕开始,但「春节」是正月初一;清明是节气日;端午/中秋是农历固定日。
+ */
+const FEST_DATE_RESOLVERS: { re: RegExp; fn: (y: number) => string | null }[] = [
+  { re: /春节/, fn: (y) => lunarToSolar(y, 1, 1) }, // 正月初一
+  { re: /清明/, fn: (y) => (solarTermDatesInRange({ start: `${y}-01-01`, end: `${y}-12-31` }).get('清明') ?? []).find((d) => d.startsWith(String(y))) ?? null },
+  { re: /端午/, fn: (y) => lunarToSolar(y, 5, 5) },
+  { re: /中秋/, fn: (y) => lunarToSolar(y, 8, 15) },
+  { re: /国庆/, fn: (y) => `${y}-10-01` },
+  { re: /元旦/, fn: (y) => `${y}-01-01` },
+  { re: /劳动/, fn: (y) => `${y}-05-01` },
+];
+
+function festivalDatesFor(name: string, year: number): Set<string> {
+  const out = new Set<string>();
+  for (const r of FEST_DATE_RESOLVERS) {
+    if (!r.re.test(name)) continue;
+    const d = r.fn(year);
+    if (d) out.add(d);
+  }
+  return out;
+}
+
 export function expandHolidaysCn(
   src: HolidayCnSource,
   data: Map<number, HolidayCnYear>,
@@ -111,8 +135,9 @@ export function expandHolidaysCn(
 ): Occurrence[] {
   const out: Occurrence[] = [];
   for (const yearData of data.values()) {
-    // 按「连续同名休息日」分组,算出假期总天数与第几天:
-    // 首日 = 过节那天(如「🧨 春节」),其余显示进度(如「🧨 春节假期 2/8」)
+    // 按「连续同名休息日」分组,算出假期总天数与第几天;
+    // 组内若包含"真节日当天"(如初一/清明/五月初五/八月十五/10·1),
+    // 那天单独显示为「🧨 春节」「🌸 清明节」,其余显示进度(「…假期 2/9」)
     const offDays = yearData.days
       .filter((d) => d.isOffDay && cmpDate(d.date, win.start) >= 0 && cmpDate(d.date, win.end) <= 0)
       .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -123,10 +148,16 @@ export function expandHolidaysCn(
       if (g && prev && g.name === d.name && addDays(prev.date, 1) === d.date) g.days.push(d);
       else groups.push({ name: d.name, days: [d] });
     }
-    const spanByName = new Map<string, { i: number; n: number; start: string }>();
+    const spanByName = new Map<string, { i: number; n: number; start: string; isFest: boolean }>();
     for (const g of groups) {
+      const festDates = festivalDatesFor(g.name, Number(g.days[0]!.date.slice(0, 4)));
       g.days.forEach((d, idx) =>
-        spanByName.set(d.date, { i: idx + 1, n: g.days.length, start: g.days[0]!.date }),
+        spanByName.set(d.date, {
+          i: idx + 1,
+          n: g.days.length,
+          start: g.days[0]!.date,
+          isFest: festDates.has(d.date),
+        }),
       );
     }
 
@@ -137,13 +168,16 @@ export function expandHolidaysCn(
       const emoji = festEmoji(day.name);
       if (day.isOffDay) {
         const span = spanByName.get(day.date)!;
-        const summary =
-          span.n === 1
-            ? `${emoji} ${day.name}`
-            : span.i === 1
-              ? `${emoji} ${day.name} · 假期第1天`
-              : `${emoji} ${day.name}假期 ${span.i}/${span.n}`;
+        let summary: string;
+        if (span.isFest) {
+          summary = `${emoji} ${day.name}`; // 节日当天:独立、醒目
+        } else if (span.n === 1) {
+          summary = `${emoji} ${day.name}`;
+        } else {
+          summary = `${emoji} ${day.name}假期 ${span.i}/${span.n}`;
+        }
         const descParts = [
+          span.isFest ? `🎉 今天${day.name.replace(/节假日?$/, '')}!` : '',
           span.n === 1
             ? '法定节假日。'
             : `法定节假日 · 假期 ${span.start} ~ ${addDays(span.start, span.n - 1)},共 ${span.n} 天(第 ${span.i} 天)。`,
@@ -475,8 +509,15 @@ export function expandSolarTerm(
 
 /** ---------- 农历传统节日(内置预设,零外部数据) ---------- */
 
-/** 内置传统节日:名称 → [农历月, 农历日];除夕特殊处理(腊月最后一天) */
-export const LUNAR_FESTIVALS: Record<string, { m: number; d: number | 'last' ; emoji: string }> = {
+/**
+ * 内置传统节日。两种锚定:
+ *   农历锚定:{ m, d, emoji },d='last' 表示腊月最后一天(除夕)
+ *   节气锚定:{ term, emoji } —— 如冬至(公历 12 月下旬,非农历日)
+ */
+export const LUNAR_FESTIVALS: Record<
+  string,
+  { m?: number; d?: number | 'last'; term?: string; emoji: string }
+> = {
   元宵节: { m: 1, d: 15, emoji: '🏮' },
   龙抬头: { m: 2, d: 2, emoji: '🐉' },
   上巳节: { m: 3, d: 3, emoji: '🌿' },
@@ -487,8 +528,10 @@ export const LUNAR_FESTIVALS: Record<string, { m: number; d: number | 'last' ; e
   寒衣节: { m: 10, d: 1, emoji: '🍂' },
   下元节: { m: 10, d: 15, emoji: '🌙' },
   腊八节: { m: 12, d: 8, emoji: '🥣' },
-  小年: { m: 12, d: 23, emoji: '🧹' },
+  '小年(北方)': { m: 12, d: 23, emoji: '🧹' },
+  '小年(南方)': { m: 12, d: 24, emoji: '🧹' },
   除夕: { m: 12, d: 'last', emoji: '🎆' },
+  冬至: { term: '冬至', emoji: '🥟' },
 };
 
 export const LUNAR_FESTIVAL_NAMES = Object.keys(LUNAR_FESTIVALS);
@@ -501,7 +544,25 @@ export function expandLunarFestival(
   const preset = LUNAR_FESTIVALS[src.festival];
   if (!preset) throw new Error(`未知传统节日:${src.festival}`);
   const out: Occurrence[] = [];
-  // 农历年在公历年前后浮动:窗口首尾年各外扩一年,保证覆盖
+
+  if (preset.term) {
+    // 节气锚定(如冬至):直接用节气表
+    for (const solar of solarTermDatesInRange(win).get(preset.term) ?? []) {
+      if (cmpDate(solar, win.start) < 0 || cmpDate(solar, win.end) > 0) continue;
+      out.push({
+        uid: makeUid(calId, `lf-${src.festival}`, solar),
+        start: solar,
+        end: addDays(solar, 1),
+        time: src.time ?? null,
+        summary: `${preset.emoji} ${src.title || src.festival}`,
+        description: [`传统节日 · ${preset.term}(公历 ${solar})`, src.note].filter(Boolean).join(' | '),
+        alarms: mergeAlarms(src),
+      });
+    }
+    return out;
+  }
+
+  // 农历锚定
   const yStart = Number(win.start.slice(0, 4)) - 1;
   const yEnd = Number(win.end.slice(0, 4)) + 1;
   for (let ly = yStart; ly <= yEnd; ly++) {
@@ -509,11 +570,12 @@ export function expandLunarFestival(
     let dateText: string;
     if (preset.d === 'last') {
       // 除夕 = 腊月最后一天(廿九或三十)
-      const dc = LunarMonth.fromYm(ly, preset.m)?.getDayCount() ?? 30;
-      solar = lunarToSolar(ly, preset.m, dc);
+      const m = preset.m!;
+      const dc = LunarMonth.fromYm(ly, m)?.getDayCount() ?? 30;
+      solar = lunarToSolar(ly, m, dc);
       dateText = `农历腊月${dc === 30 ? '三十' : '廿九'}`;
     } else {
-      solar = lunarToSolar(ly, preset.m, preset.d);
+      solar = lunarToSolar(ly, preset.m!, preset.d!);
       dateText = `农历${preset.m}月${preset.d}日`;
     }
     if (!solar) continue;
