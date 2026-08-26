@@ -114,9 +114,12 @@ export const LUNAR_FESTIVALS: Record<
   string,
   { m?: number; d?: number | 'last'; term?: string; emoji: string }
 > = {
+  春节: { m: 1, d: 1, emoji: '🧨' },
   元宵节: { m: 1, d: 15, emoji: '🏮' },
   龙抬头: { m: 2, d: 2, emoji: '🐉' },
+  清明节: { term: '清明', emoji: '🌸' },
   上巳节: { m: 3, d: 3, emoji: '🌿' },
+  端午节: { m: 5, d: 5, emoji: '🐉' },
   七夕节: { m: 7, d: 7, emoji: '💞' },
   中元节: { m: 7, d: 15, emoji: '🕯️' },
   中秋节: { m: 8, d: 15, emoji: '🥮' },
