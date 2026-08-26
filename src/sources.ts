@@ -3,6 +3,11 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Lunar, LunarMonth, Solar } from 'lunar-typescript';
+import {
+  LUNAR_FESTIVALS,
+  LUNAR_FESTIVAL_ALIASES,
+  SOLAR_TERM_NAMES,
+} from './types.js';
 import type {
   HolidayCnSource,
   HolidayCnYear,
@@ -507,42 +512,23 @@ export function expandSolarTerm(
   return out;
 }
 
-/** ---------- 农历传统节日(内置预设,零外部数据) ---------- */
-
-/**
- * 内置传统节日。两种锚定:
- *   农历锚定:{ m, d, emoji },d='last' 表示腊月最后一天(除夕)
- *   节气锚定:{ term, emoji } —— 如冬至(公历 12 月下旬,非农历日)
- */
-export const LUNAR_FESTIVALS: Record<
-  string,
-  { m?: number; d?: number | 'last'; term?: string; emoji: string }
-> = {
-  元宵节: { m: 1, d: 15, emoji: '🏮' },
-  龙抬头: { m: 2, d: 2, emoji: '🐉' },
-  上巳节: { m: 3, d: 3, emoji: '🌿' },
-  七夕节: { m: 7, d: 7, emoji: '💞' },
-  中元节: { m: 7, d: 15, emoji: '🕯️' },
-  中秋节: { m: 8, d: 15, emoji: '🥮' },
-  重阳节: { m: 9, d: 9, emoji: '⛰️' },
-  寒衣节: { m: 10, d: 1, emoji: '🍂' },
-  下元节: { m: 10, d: 15, emoji: '🌙' },
-  腊八节: { m: 12, d: 8, emoji: '🥣' },
-  '小年(北方)': { m: 12, d: 23, emoji: '🧹' },
-  '小年(南方)': { m: 12, d: 24, emoji: '🧹' },
-  除夕: { m: 12, d: 'last', emoji: '🎆' },
-  冬至: { term: '冬至', emoji: '🥟' },
-};
-
-export const LUNAR_FESTIVAL_NAMES = Object.keys(LUNAR_FESTIVALS);
+/** ---------- 农历传统节日(预设定义在 types.ts,单一事实源) ---------- */
 
 export function expandLunarFestival(
   src: LunarFestivalSource,
   win: Window,
   calId: string,
 ): Occurrence[] {
-  const preset = LUNAR_FESTIVALS[src.festival];
+  // 旧名兼容:如 '小年' → '小年(北方)';展示名一律用规范名
+  const canonical = LUNAR_FESTIVAL_ALIASES[src.festival] ?? src.festival;
+  const preset = LUNAR_FESTIVALS[canonical];
   if (!preset) throw new Error(`未知传统节日:${src.festival}`);
+  // title 若只是旧名/与节日同名,升级为规范名;用户真正自定义的标题则保留
+  const t = src.title?.trim();
+  const displayName =
+    !t || t === src.festival || t === canonical || LUNAR_FESTIVAL_ALIASES[t]
+      ? canonical
+      : t;
   const out: Occurrence[] = [];
 
   if (preset.term) {
@@ -554,7 +540,7 @@ export function expandLunarFestival(
         start: solar,
         end: addDays(solar, 1),
         time: src.time ?? null,
-        summary: `${preset.emoji} ${src.title || src.festival}`,
+        summary: `${preset.emoji} ${displayName}`,
         description: [`传统节日 · ${preset.term}(公历 ${solar})`, src.note].filter(Boolean).join(' | '),
         alarms: mergeAlarms(src),
       });
@@ -585,7 +571,7 @@ export function expandLunarFestival(
       start: solar,
       end: addDays(solar, 1),
       time: src.time ?? null,
-      summary: `${preset.emoji} ${src.title || src.festival}`,
+      summary: `${preset.emoji} ${displayName}`,
       description: [`传统节日 · ${dateText}`, src.note].filter(Boolean).join(' | '),
       alarms: mergeAlarms(src),
     });

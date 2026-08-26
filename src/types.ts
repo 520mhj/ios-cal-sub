@@ -106,18 +106,48 @@ export const solarTermSource = z.object({
   days: z.number().int().min(1).max(366).default(1),
 });
 
-/** 内置传统节日名(与 sources.ts 的 LUNAR_FESTIVALS 一一对应;冬至为节气锚定) */
-export const LUNAR_FESTIVAL_NAMES = [
-  '元宵节', '龙抬头', '上巳节', '七夕节', '中元节', '中秋节',
-  '重阳节', '寒衣节', '下元节', '腊八节', '冬至',
-  '小年(北方)', '小年(南方)', '除夕',
+/**
+ * 内置传统节日预设(单一事实源:sources.ts 从这里取,编辑器下拉取 keys)。
+ * 两种锚定:农历 { m, d | 'last' } / 节气 { term }
+ */
+export const LUNAR_FESTIVALS: Record<
+  string,
+  { m?: number; d?: number | 'last'; term?: string; emoji: string }
+> = {
+  元宵节: { m: 1, d: 15, emoji: '🏮' },
+  龙抬头: { m: 2, d: 2, emoji: '🐉' },
+  上巳节: { m: 3, d: 3, emoji: '🌿' },
+  七夕节: { m: 7, d: 7, emoji: '💞' },
+  中元节: { m: 7, d: 15, emoji: '🕯️' },
+  中秋节: { m: 8, d: 15, emoji: '🥮' },
+  重阳节: { m: 9, d: 9, emoji: '⛰️' },
+  寒衣节: { m: 10, d: 1, emoji: '🍂' },
+  下元节: { m: 10, d: 15, emoji: '🌙' },
+  腊八节: { m: 12, d: 8, emoji: '🥣' },
+  冬至: { term: '冬至', emoji: '🥟' },
+  '小年(北方)': { m: 12, d: 23, emoji: '🧹' },
+  '小年(南方)': { m: 12, d: 24, emoji: '🧹' },
+  除夕: { m: 12, d: 'last', emoji: '🎆' },
+};
+
+export const LUNAR_FESTIVAL_NAMES = Object.keys(LUNAR_FESTIVALS);
+
+/** 旧名兼容:'小年'(未分南北)视作北方小年(腊月廿三) */
+export const LUNAR_FESTIVAL_ALIASES: Record<string, string> = {
+  小年: '小年(北方)',
+};
+
+/** zod 枚举 = 现行名 + 旧名别名 */
+export const LUNAR_FESTIVAL_ENUM = [
+  ...LUNAR_FESTIVAL_NAMES,
+  ...Object.keys(LUNAR_FESTIVAL_ALIASES),
 ] as const;
 
 export const lunarFestivalSource = z.object({
   type: z.literal('lunar-festival'),
   /** 标题自动取节日名;仍可覆盖 */
   title: eventCommon.title.optional(),
-  festival: z.enum(LUNAR_FESTIVAL_NAMES),
+  festival: z.enum(LUNAR_FESTIVAL_ENUM),
   ...eventCommonOmitTitle,
 });
 
