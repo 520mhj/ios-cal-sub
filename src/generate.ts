@@ -60,14 +60,14 @@ function indexHtml(cfg: AppConfig, rows: BuildSummaryRow[], generatedAt: string)
   const base = cfg.site_base_url?.replace(/\/+$/, '') ?? '';
   const host = base.replace(/^https?:\/\//, '');
 
-  // 公开日历:直接给链接;私密日历:首页只显示 🔒 徽标,专属链接在编辑页对应区域查看
+  // 公开日历:直接给链接(附二维码,家人朋友相机扫一扫即订阅);私密:只显示 🔒 徽标,专属链接在编辑页
   const subscribeArea = (r: BuildSummaryRow) => {
     if (r.access === 'private') {
       return `<span class="btn disabled" title="私密订阅 · 链接在编辑页该日历区域查看">🔒 私密订阅</span>`;
     }
-    return base
-      ? `<a class="btn" href="webcal://${host}/${r.file}">📲 订阅(webcal)</a>`
-      : `<span class="btn disabled" title="配置 Variable CAL_SITE_BASE_URL 并重新生成后可用">📲 部署后可订阅</span>`;
+    if (!base) return `<span class="btn disabled" title="配置 Variable CAL_SITE_BASE_URL 并重新生成后可用">📲 部署后可订阅</span>`;
+    return `<a class="btn" href="webcal://${host}/${r.file}">📲 订阅(webcal)</a>` +
+      `<button type="button" class="btn ghost" data-qr="webcal://${host}/${r.file}" data-name="${escapeHtml(r.name)}">🔳 扫码订阅</button>`;
   };
   const cards = rows
     .map(
@@ -99,10 +99,17 @@ function indexHtml(cfg: AppConfig, rows: BuildSummaryRow[], generatedAt: string)
   .card { border: 1px solid #8884; border-radius: 14px; padding: 18px 22px; margin: 16px 0; }
   .card h2 { margin: 0 0 6px; font-size: 20px; }
   .meta { color: #888; margin: 0 0 12px; font-size: 13px; }
-  .btn { display: inline-block; padding: 8px 14px; border-radius: 9px; background: #0a84ff; color: #fff; text-decoration: none; font-size: 14px; margin-right: 8px; }
+  .btn { display: inline-block; padding: 8px 14px; border-radius: 9px; background: #0a84ff; color: #fff; text-decoration: none; font-size: 14px; margin-right: 8px; border: 0; cursor: pointer; }
   .btn.ghost { background: transparent; color: inherit; border: 1px solid #8886; }
   .btn.disabled { background: #8884; color: inherit; cursor: default; }
   code { display: block; margin-top: 10px; font-size: 12px; opacity: .7; word-break: break-all; }
+  .qr-overlay { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 99; }
+  .qr-overlay[hidden] { display: none; }
+  .qr-box { background: #fff; color: #111; border-radius: 16px; padding: 24px; max-width: 92vw; text-align: center; box-shadow: 0 10px 40px #0006; }
+  .qr-box h3 { margin: 0 0 12px; font-size: 17px; }
+  .qr-tip { font-size: 12px; color: #666; line-height: 1.6; margin: 12px 0; max-width: 280px; }
+  .qr-box input { width: 100%; box-sizing: border-box; font-size: 12px; padding: 8px; border: 1px solid #8886; border-radius: 8px; color: #333; background: #fafafa; }
+  .qr-actions { margin-top: 12px; display: flex; gap: 8px; justify-content: center; }
   footer { color: #888; font-size: 12px; margin-top: 32px; line-height: 1.7; }
 </style>
 </head>
@@ -111,6 +118,47 @@ function indexHtml(cfg: AppConfig, rows: BuildSummaryRow[], generatedAt: string)
 <p>在 iPhone 上打开本页,点「订阅(webcal)」即可;或在 <b>设置 → 应用 → 日历 → 日历账户 → 添加订阅日历</b> 中粘贴下方链接。</p>
 ${cards}
 <footer>由 ios-cal-sub 生成于 ${escapeHtml(generatedAt)}。数据来源:<a href="https://github.com/NateScarlet/holiday-cn">NateScarlet/holiday-cn</a>(国务院公告自动化解析)。</footer>
+<div class="qr-overlay" id="qrModal" hidden>
+  <div class="qr-box">
+    <h3 id="qrTitle">扫码订阅</h3>
+    <div id="qrSvg"></div>
+    <p class="qr-tip">iPhone 相机对准二维码 → 点下方链接 → 自动弹出「订阅日历」;安卓/桌面用相机或任意扫码应用同样可订。</p>
+    <input readonly id="qrLink" onclick="this.select()">
+    <div class="qr-actions">
+      <button type="button" class="btn" id="qrCopy">📋 复制链接</button>
+      <button type="button" class="btn ghost" id="qrClose">关闭</button>
+    </div>
+  </div>
+</div>
+<script src="qrcode.min.js"></script>
+<script>
+  document.querySelectorAll('[data-qr]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const url = b.dataset.qr, name = b.dataset.name;
+      document.getElementById('qrTitle').textContent = '扫码订阅 · ' + name;
+      document.getElementById('qrLink').value = url;
+      const qr = qrcode(0, 'M');
+      qr.addData(url, 'Byte');
+      qr.make();
+      const n = qr.getModuleCount();
+      let svg = '<svg viewBox="0 0 ' + n + ' ' + n + '" style="width:232px;height:232px" shape-rendering="crispEdges">';
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) svg += '<rect x="' + c + '" y="' + r + '" width="1" height="1"/>';
+      svg += '</svg>';
+      document.getElementById('qrSvg').innerHTML = svg;
+      document.getElementById('qrModal').hidden = false;
+    }),
+  );
+  const closeQr = () => { document.getElementById('qrModal').hidden = true; };
+  document.getElementById('qrModal').addEventListener('click', (e) => {
+    if (e.target.id === 'qrModal' || e.target.id === 'qrClose') closeQr();
+  });
+  document.getElementById('qrCopy').addEventListener('click', () => {
+    const v = document.getElementById('qrLink').value, b = document.getElementById('qrCopy');
+    const ok = () => { b.textContent = '✅ 已复制'; setTimeout(() => { b.textContent = '📋 复制链接'; }, 1500); };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(v).then(ok, () => { document.getElementById('qrLink').select(); });
+    else { document.getElementById('qrLink').select(); }
+  });
+</script>
 </body>
 </html>`;
 }
@@ -302,6 +350,8 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
   );
   const tpl = await fs.promises.readFile(path.join(HERE, 'editor-page.html'), 'utf8');
   await fs.promises.writeFile(path.join(edDir, 'index.html'), tpl, 'utf8');
+  // 二维码库(UMD,零依赖):首页与编辑器页共用
+  await fs.promises.copyFile(path.join(HERE, 'qrcode.min.js'), path.join(outDir, 'qrcode.min.js'));
 
   if (opts.log !== false) {
     console.log(`\n🎉 完成:${cfg.calendars.length} 个日历 → ${path.basename(outDir)}(含 index.html、manifest.json、editor/)`);

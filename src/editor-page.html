@@ -122,6 +122,7 @@
 
 <!-- 构建期生成:与 Node 端完全一致的 YAML 序列化器(全局 const dumpYaml) -->
 <script src="./yaml-dump.js"></script>
+<script src="../qrcode.min.js"></script>
 <script>
 'use strict';
 const TYPES = {
@@ -183,8 +184,7 @@ async function tryUnlock(){
   } else { toast('密钥不对,再试试', true); }
 }
 /* 私密订阅令牌(与构建端一致):sha256( sha256(UUID)hex + '|' + calId ) 前32位 */
-async function subTokenFor(calId){
-  const k=sessionStorage.getItem('ics_edit_key');
+async function subTokenFor(calId){  const k=sessionStorage.getItem('ics_edit_key');
   if(!k) return null;
   const h1=await sha256Hex(k);
   const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(h1+'|'+calId));
@@ -193,6 +193,18 @@ async function subTokenFor(calId){
 function siteBase(){
   if(cfg?.site_base_url) return cfg.site_base_url.replace(/\/+$/,'');
   return location.href.split('/editor')[0]; // 部署后从地址推断
+}
+/* ---------- 二维码(iPhone 相机扫码即订阅) ---------- */
+function webcalOf(u){ return u.replace(/^https?:\/\//,'webcal://'); }
+function renderQrInto(el,text){
+  if(!el || typeof qrcode==='undefined'){ if(el)el.innerHTML='<span class="hint">二维码组件未加载</span>'; return; }
+  const qr=qrcode(0,'M'); qr.addData(text,'Byte'); qr.make();
+  const n=qr.getModuleCount();
+  let s='<svg viewBox="0 0 '+n+' '+n+'" style="width:152px;height:152px" shape-rendering="crispEdges">';
+  for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(qr.isDark(r,c))s+='<rect x="'+c+'" y="'+r+'" width="1" height="1"/>';
+  s+='</svg>';
+  el.innerHTML='<div style="display:inline-block;background:#fff;padding:8px;border-radius:10px;box-shadow:0 1px 6px #0003">'+s+'</div>'+
+    '<p class="hint">iPhone 相机对准二维码 → 点链接 → 自动弹出「订阅日历」。</p>';
 }
 
 /* ---------- 加载 ---------- */
@@ -326,13 +338,15 @@ async function fillPrivateLink(){
     note.innerHTML='<p class="hint">⚠️ 当前会话没有密钥材料(未启用访问密钥或刚清空会话)。重新解锁一次即可生成私密链接。</p>'; return;
   }
   const url=`${siteBase()}/s/${tok}/${c.id}.ics`;
-  note.innerHTML=`<p class="hint" style="margin-top:8px">私密订阅专属链接(发给家人即订;iPhone 里粘贴到「添加订阅日历」):</p>
+  note.innerHTML=`<p class="hint" style="margin-top:8px">私密订阅专属链接(发给家人即订;iPhone 里粘贴到「添加订阅日历」,或扫码):</p>
     <div class="row" style="gap:8px">
       <input readonly value="${esc(url)}" style="flex:1;font-size:12px;padding:7px;border-radius:8px;border:1px solid #8886;color:inherit;background:transparent">
       <button class="btn small" id="copySub">📋 复制</button>
     </div>
-    <p class="hint">令牌按日历独立派生,泄露此链接不影响其他日历;轮换访问密钥会使所有私密链接失效(重新复制新链即可)。</p>`;
+    <div style="margin-top:10px" id="privQr"></div>
+    <p class="hint">令牌按日历独立派生,泄露此链接不影响其他日历;轮换访问密钥会使所有私密链接失效(重新复制新链即可)。⚠️ 二维码含专属令牌,请只私下发给家人朋友。</p>`;
   $('copySub').onclick=()=>{ navigator.clipboard.writeText(url).then(()=>toast('已复制'),()=>toast('复制失败,请手动选择',true)); };
+  renderQrInto($('privQr'), webcalOf(url));
 }
 function moveSrc(i,d){ const a=cfg.calendars[active].sources; [a[i],a[i+d]]=[a[i+d],a[i]]; render(); }
 function render(){ if(!cfg)return; renderTabs(); renderCal(); }

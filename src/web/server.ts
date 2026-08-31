@@ -101,6 +101,10 @@ const server = http.createServer(async (req, res) => {
       serveFile(res, path.join(HERE, 'editor.html'));
       return;
     }
+    if (req.method === 'GET' && pathname === '/qrcode.min.js') {
+      serveFile(res, path.join(HERE, 'qrcode.min.js'));
+      return;
+    }
     if (req.method === 'GET' && pathname === '/api/state') {
       json(res, 200, { ok: true, configPath: CONFIG_PATH, config: readConfig() });
       return;

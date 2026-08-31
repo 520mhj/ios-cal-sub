@@ -95,8 +95,16 @@
     <button class="btn" id="dlgOk" onclick="submitDlg()">确定</button>
   </div>
 </dialog>
+<dialog id="qrDlg" style="border:0;border-radius:14px;padding:22px;max-width:92vw;text-align:center">
+  <h3 id="qrDlgTitle" style="margin:0 0 12px">扫码订阅</h3>
+  <div id="qrDlgSvg"></div>
+  <p class="hint" style="font-size:12px;margin:12px 0">iPhone 相机对准二维码 → 点链接 → 弹出「订阅日历」;需与本机同一 Wi-Fi。</p>
+  <input id="qrDlgLink" readonly style="width:100%;box-sizing:border-box;font-size:12px;padding:8px;border:1px solid #8886;border-radius:8px">
+  <div style="margin-top:12px"><button class="btn ghost" onclick="document.getElementById('qrDlg').close()">关闭</button></div>
+</dialog>
 <div id="toast"></div>
 
+<script src="/qrcode.min.js"></script>
 <script>
 'use strict';
 const TYPES = {
@@ -219,6 +227,7 @@ function renderCal() {
       <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn" id="addEvBtn">＋ 添加事件</button>
         <a class="btn ghost" href="/dist/${encodeURIComponent(c.id)}.ics" download style="text-decoration:none">⬇️ 下载当前 ${esc(c.id)}.ics</a>
+        <button class="btn ghost" id="qrSubBtn">🔳 扫码订阅</button>
       </div>
     </div>`;
   $('calName').onchange = (e) => { cfg.calendars[active].name = e.target.value.trim() || c.name; renderTabs(); };
@@ -231,9 +240,9 @@ function renderCal() {
     if (!confirm(`确定删除日历「${c.name}」及其全部 ${c.sources.length} 个事件?`)) return;
     cfg.calendars.splice(active, 1);
     active = Math.max(0, active - 1);
-    render();
-  };
+    render();  };
   $('addEvBtn').onclick = () => openEventForm(active, -1);
+  $('qrSubBtn').onclick = () => openQrDlg(c);
   panel.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEventForm(active, Number(b.dataset.edit)));
   panel.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
     if (!confirm('确定删除这条事件?')) return;
@@ -249,6 +258,23 @@ function moveSrc(i, dir) {
   const j = i + dir;
   [arr[i], arr[j]] = [arr[j], arr[i]];
   render();
+}
+
+/* 局域网扫码订阅:编码 http://<IP>:<端口>/dist/<id>.ics(同 Wi-Fi 可直接订) */
+function openQrDlg(c) {
+  if (c.access === 'private') { alert('私密日历的订阅专属链接在部署后的在线编辑器对应日历处生成,本地无密钥材料。'); return; }
+  const url = `${location.origin}/dist/${encodeURIComponent(c.id)}.ics`;
+  $('qrDlgTitle').textContent = `扫码订阅 · ${c.name}`;
+  $('qrDlgLink').value = url;
+  const qr = qrcode(0, 'M');
+  qr.addData(url, 'Byte');
+  qr.make();
+  const n = qr.getModuleCount();
+  let s = '<svg viewBox="0 0 ' + n + ' ' + n + '" style="width:200px;height:200px" shape-rendering="crispEdges">';
+  for (let r = 0; r < n; r++) for (let c2 = 0; c2 < n; c2++) if (qr.isDark(r, c2)) s += '<rect x="' + c2 + '" y="' + r + '" width="1" height="1"/>';
+  s += '</svg>';
+  $('qrDlgSvg').innerHTML = '<div style="display:inline-block;background:#fff;padding:8px;border-radius:10px">' + s + '</div>';
+  $('qrDlg').showModal();
 }
 
 function render() {

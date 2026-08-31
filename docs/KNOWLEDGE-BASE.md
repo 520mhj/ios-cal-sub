@@ -137,6 +137,12 @@
 - **冬至/清明的节气锚定**:lunar-festival 预设支持 `{term}` 锚定(复用节气表),区别于农历 `{m,d}` 锚定;除夕 `d:'last'` 用 LunarMonth.getDayCount() 判廿九/三十。
 - **枚举改名必须带别名**:预设改名(小年→小年北方/南方)后,网页端已保存的旧值会炸 CI 构建(zod enum 校验)。规约:**枚举值收敛进 types.ts 单一事实源 + LUNAR_FESTIVAL_ALIASES 兼容旧名 + 展示名自动升级为规范名(仅当 title 是旧名或同名时)**。
 
+### 17. 扫码订阅:链接的另一种呈现(QR)
+- **可行性(iOS)**:相机扫到含 `webcal://`(或 `https://…ics`)的二维码 → 点链接 → Safari 自动弹「订阅日历」确认框,一条龙完成,无需手动粘贴(Apple 官方扫码支持 + 业界 AddEvent 同款做法)。
+- **实现**:内置 [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator)(单文件 UMD、零依赖、MIT)于 `src/qrcode.min.js`,构建时拷到 `dist/qrcode.min.js`;首页公开卡片「🔳 扫码订阅」弹窗渲染 **webcal** 二维码,编辑页私密链接旁内联渲染(附"令牌勿外传"提示);LAN 编辑器用 `http://IP:port/dist/<id>.ics` 二维码(同 Wi-Fi 可订;局域网 IP 上 webcal 不保证可用,故编码 http)。
+- **编码选择**:iOS 弹订阅提示最稳的是 `webcal://`;https 的 .ics 链接在部分 iOS 版本只触发下载而非订阅弹窗。
+- **规约**:二维码是 capability URL 的另一种呈现——私密令牌二维码的传播半径等于链接传播半径,UI 必须提示;页面侧用 SVG 渲染(非 canvas),无外部网络依赖。
+
 ---
 
 ## 六、开发环境备注(本机)
