@@ -37,8 +37,10 @@ export function indexHtml(
       return `<span class="btn disabled" title="私密订阅 · 链接在编辑页该日历区域查看">🔒 私密订阅</span>`;
     }
     if (!base) return `<span class="btn disabled" title="部署后可订阅">📲 部署后可订阅</span>`;
-    return `<a class="btn" href="${webcalProto}${host}/${r.file}">📲 订阅(webcal)</a>` +
-      `<button type="button" class="btn ghost" data-qr="${webcalProto}${host}/${r.file}" data-name="${escapeHtml(r.name)}">🔳 扫码订阅</button>`;
+    const subscribeUrl = `${webcalProto}${host}/${r.file}`;
+    const qrUrl = `${base}/${r.file}`; // 二维码用 https://,兼容性更好(部分手机扫码器不识别 webcals://)
+    return `<a class="btn" href="${subscribeUrl}">📲 订阅(webcal)</a>` +
+      `<button type="button" class="btn ghost" data-qr="${qrUrl}" data-name="${escapeHtml(r.name)}">🔳 扫码订阅</button>`;
   };
   const cards = rows
     .map(
@@ -93,7 +95,7 @@ ${cards}
   <div class="qr-box">
     <h3 id="qrTitle">扫码订阅</h3>
     <div id="qrSvg"></div>
-    <p class="qr-tip">iPhone 相机对准二维码 → 点下方链接 → 自动弹出「订阅日历」;安卓/桌面用相机或任意扫码应用同样可订。</p>
+    <p class="qr-tip">手机相机对准二维码 → 点链接打开浏览器 → 自动下载 .ics 文件 → 点击文件即可导入日历。也可复制下方链接,在「设置 → 日历 → 添加订阅日历」中粘贴。</p>
     <input readonly id="qrLink" onclick="this.select()">
     <div class="qr-actions">
       <button type="button" class="btn" id="qrCopy">📋 复制链接</button>
