@@ -29,14 +29,16 @@ export function indexHtml(
 ): string {
   const base = siteBaseUrl?.replace(/\/+$/, '') ?? '';
   const host = base.replace(/^https?:\/\//, '');
+  // HTTPS 站点用 webcals://(安全),HTTP 站点用 webcal://
+  const webcalProto = base.startsWith('https://') ? 'webcals://' : 'webcal://';
 
   const subscribeArea = (r: BuildSummaryRow) => {
     if (r.access === 'private') {
       return `<span class="btn disabled" title="私密订阅 · 链接在编辑页该日历区域查看">🔒 私密订阅</span>`;
     }
     if (!base) return `<span class="btn disabled" title="部署后可订阅">📲 部署后可订阅</span>`;
-    return `<a class="btn" href="webcal://${host}/${r.file}">📲 订阅(webcal)</a>` +
-      `<button type="button" class="btn ghost" data-qr="webcal://${host}/${r.file}" data-name="${escapeHtml(r.name)}">🔳 扫码订阅</button>`;
+    return `<a class="btn" href="${webcalProto}${host}/${r.file}">📲 订阅(webcal)</a>` +
+      `<button type="button" class="btn ghost" data-qr="${webcalProto}${host}/${r.file}" data-name="${escapeHtml(r.name)}">🔳 扫码订阅</button>`;
   };
   const cards = rows
     .map(
