@@ -108,14 +108,20 @@ ${cards}
       const url = b.dataset.qr, name = b.dataset.name;
       document.getElementById('qrTitle').textContent = '扫码订阅 · ' + name;
       document.getElementById('qrLink').value = url;
-      const qr = qrcode(0, 'M');
-      qr.addData(url, 'Byte');
-      qr.make();
-      const n = qr.getModuleCount();
-      let svg = '<svg viewBox="0 0 ' + n + ' ' + n + '" style="width:232px;height:232px" shape-rendering="crispEdges">';
-      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) svg += '<rect x="' + c + '" y="' + r + '" width="1" height="1"/>';
-      svg += '</svg>';
-      document.getElementById('qrSvg').innerHTML = svg;
+      try {
+        if (typeof qrcode !== 'function') throw new Error('qrcode 库未加载,请检查 qrcode.min.js 是否可访问');
+        const qr = qrcode(0, 'M');
+        qr.addData(url, 'Byte');
+        qr.make();
+        const n = qr.getModuleCount();
+        let svg = '<svg viewBox="0 0 ' + n + ' ' + n + '" style="width:232px;height:232px" shape-rendering="crispEdges">';
+        for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) svg += '<rect x="' + c + '" y="' + r + '" width="1" height="1"/>';
+        svg += '</svg>';
+        document.getElementById('qrSvg').innerHTML = svg;
+      } catch (e) {
+        document.getElementById('qrSvg').innerHTML = '<p style="color:#d33;font-size:13px">二维码生成失败: ' + (e.message || e) + '</p>';
+        console.error('QR generation failed:', e, 'url:', url);
+      }
       document.getElementById('qrModal').hidden = false;
     }),
   );
