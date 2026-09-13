@@ -1,0 +1,94 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ============================================================
+      # 自动创建/获取 KV Namespace
+      # - 如果 CAL_KV 已存在,直接复用其 id
+      # - 如果不存在,自动创建
+      # - 把 wrangler.toml 中的占位符替换为真实 id
+      # ============================================================
+      - name: Create or reuse KV namespace
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          API="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces"
+          AUTH="Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+
+          # 查找已存在的 CAL_KV
+          KV_ID=$(curl -s -X GET "${API}?per_page=100" -H "${AUTH}" \
+            | jq -r '.result[]? | select(.title=="CAL_KV") | .id' | head -1)
+
+          if [ -n "$KV_ID" ] && [ "$KV_ID" != "null" ]; then
+            echo "✅ 复用已存在的 KV namespace: CAL_KV ($KV_ID)"
+          else
+            echo "🆕 创建新的 KV namespace: CAL_KV"
+            KV_ID=$(curl -s -X POST "${API}" -H "${AUTH}" -H "Content-Type: application/json" \
+              -d '{"title":"CAL_KV"}' | jq -r '.result.id')
+            if [ -z "$KV_ID" ] || [ "$KV_ID" == "null" ]; then
+              echo "❌ 创建 KV namespace 失败,请检查 API Token 权限(需要 Account KV Storage:Edit)"
+              exit 1
+            fi
+            echo "✅ 创建成功: $KV_ID"
+          fi
+
+          # 替换 wrangler.toml 中的占位符
+          sed -i "s/REPLACE_WITH_YOUR_KV_NAMESPACE_ID/${KV_ID}/" wrangler.toml
+          echo "✅ wrangler.toml 已更新 KV id"
+
+      # ============================================================
+      # 设置 EDITOR_KEY_SHA256(可选)
+      # - 如果在 GitHub Secrets 中配置了 EDITOR_KEY_SHA256,自动设置为 Worker Secret
+      # - 如果没配置,跳过;用户可后续在 Cloudflare Dashboard 手动添加
+      # ============================================================
+      - name: Set editor key secret (optional)
+        if: ${{ secrets.EDITOR_KEY_SHA256 != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EDITOR_KEY_SHA256: ${{ secrets.EDITOR_KEY_SHA256 }}
+        run: |
+          echo "$EDITOR_KEY_SHA256" | npx wrangler secret put EDITOR_KEY_SHA256
+          echo "✅ EDITOR_KEY_SHA256 已设置"
+
+      # ============================================================
+      # 部署到 Cloudflare Workers
+      # ============================================================
+      - name: Deploy to Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler deploy
+          echo "🎉 部署成功!"

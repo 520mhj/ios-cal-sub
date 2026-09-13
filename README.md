@@ -66,14 +66,18 @@ pnpm cal:key
 > 这个 UUID 有两个用途:① 解锁在线编辑器;② 作为私密订阅令牌的派生源。
 > 服务端只存它的 SHA-256 哈希,不存原始 UUID。
 
-### 第 3 步 · 创建 KV 命名空间
+### 第 3 步 · 创建 KV 命名空间（仅手动部署方式需要）
+
+> 如果用 GitHub Actions 自动部署（方式二），此步可跳过，Actions 会自动创建 KV。
 
 ```bash
 npx wrangler kv namespace create CAL_KV
 ```
 复制返回的 `id`,替换 `wrangler.toml` 中的 `REPLACE_WITH_YOUR_KV_NAMESPACE_ID`。
 
-### 第 4 步 · 设置密钥并部署
+### 第 4 步 · 部署
+
+#### 方式一：手动部署（推荐首次使用）
 
 ```bash
 # 设置 UUID 密钥的 SHA-256(把下面的 UUID 换成你自己的)
@@ -82,6 +86,24 @@ echo -n "你的-UUID" | sha256sum | awk '{print $1}' | npx wrangler secret put E
 # 部署
 npx wrangler deploy
 ```
+
+#### 方式二：GitHub Actions 自动部署（push 即部署，自动创建 KV）
+
+1. 在 GitHub 仓库 → **Settings → Secrets and variables → Actions** 添加以下 Secrets:
+
+   | Name | Value | 说明 |
+   |---|---|---|
+   | `CLOUDFLARE_API_TOKEN` | Cloudflare API Token | 需权限:Workers Scripts:Edit + Account KV Storage:Edit |
+   | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID | Dashboard 右侧可复制 |
+   | `EDITOR_KEY_SHA256` | UUID 的 SHA-256(可选) | 不填则后续在 Dashboard 手动添加 |
+
+   > API Token 获取:Cloudflare Dashboard → 头像 → My Profile → API Tokens → Create Token → Use "Edit Cloudflare Workers" 模板 → 勾选 KV Storage 权限。
+
+2. push 到 `main` 分支,GitHub Actions 会自动:
+   - ✅ 检查 `CAL_KV` namespace 是否存在,不存在则自动创建
+   - ✅ 自动替换 `wrangler.toml` 中的 KV id 占位符
+   - ✅ 部署到 Cloudflare Workers
+   - ✅ 如果配置了 `EDITOR_KEY_SHA256`,自动设置为 Worker Secret
 
 部署成功后,你的服务地址是 `https://ios-cal-sub.<你的子域>.workers.dev`。
 
@@ -235,6 +257,7 @@ iOS 忽略订阅源的文件内提醒。按「第 7 步」设置默认提醒时�
 ```
 ios-cal-sub/
 ├── wrangler.toml          # ★ Workers 配置(KV binding、assets、compatibility_date)
+├── .github/workflows/deploy.yml  # GitHub Actions 自动部署(自动创建 KV)
 ├── calendars.yaml          # 公开示例配置(仅本地构建用,私人日历不写这里)
 ├── calendars.private.yaml  # 私人日历迁移文件(.gitignore,不入库)
 ├── public/                 # 静态资源(编辑器页面、二维码库、yaml-dump.js)
