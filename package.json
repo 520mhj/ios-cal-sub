@@ -2,6 +2,7 @@
   "name": "ios-cal-sub",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "iOS 日历订阅生成器:配置驱动生成静态 .ics(中国节假日调休补班 / 农历生日 / 自定义周期事件)",
   "engines": {
