@@ -56,8 +56,9 @@ Fork 者拿到的代码只含公开的中国节假日日历,你的生日、纪�
 3. 授权 GitHub,选择你 Fork 的 `ios-cal-sub` 仓库
 4. 部署设置:
    - **生产分支**: `main`
-   - **构建命令**: 留空(wrangler 自动打包 TypeScript)
+   - **构建命令**: 留空(静态资源已内联到 `src/assets.generated.ts`,无需构建)
    - **构建输出目录**: 留空
+   - **部署命令**: `npx wrangler deploy`(或 `pnpm wrangler deploy`)
 5. 点 **保存并部署**,等待 ~30 秒部署完成
 
 部署成功后,你的服务地址是 `https://ios-cal-sub.<你的子域>.workers.dev`。
@@ -173,6 +174,9 @@ iPhone 设置 → 应用 → 日历 → 默认提醒时间
 ```bash
 pnpm install
 
+# 生成静态资源内联模块(修改 public/ 中的文件后需重新运行)
+pnpm build:assets
+
 # 本地构建(用 calendars.yaml 生成 dist/,用于离线验证)
 pnpm cal:build
 pnpm cal:verify
@@ -236,16 +240,17 @@ iOS 忽略订阅源的文件内提醒。按「第 7 步」设置默认提醒时�
 
 ```
 ios-cal-sub/
-├── wrangler.toml          # ★ Workers 配置(KV binding 可选、assets、compatibility_date)
+├── wrangler.toml          # ★ Workers 配置(KV binding 可选、compatibility_date)
 ├── calendars.yaml          # 公开示例配置(仅本地构建用,私人日历不写这里)
 ├── calendars.private.yaml  # 私人日历迁移文件(.gitignore,不入库)
-├── public/                 # 静态资源(编辑器页面、二维码库、yaml-dump.js)
+├── public/                 # 静态资源源文件(编辑器页面、二维码库、yaml-dump.js)
 │   ├── qrcode.min.js
 │   └── editor/
 │       ├── index.html      # 在线编辑器
 │       └── yaml-dump.js
 ├── src/
 │   ├── worker.ts           # ★ Worker 入口(路由、KV 读写、鉴权、动态生成 .ics)
+│   ├── assets.generated.ts # 自动生成的静态资源内联模块(pnpm build:assets 生成)
 │   ├── types.ts            # zod 配置校验 schema
 │   ├── dates.ts            # 日期工具(纯 UTC 语义)
 │   ├── ics.ts              # 极简 RFC 5545 ICS 写入器
@@ -258,8 +263,10 @@ ios-cal-sub/
 │   ├── yaml-dump.ts        # 零依赖 YAML 序列化
 │   ├── generate.ts         # 本地构建入口(配置 → dist/*.ics)
 │   ├── keygen.ts           # cal:key:生成访问密钥 UUID
-│   └── editor-page.html    # 编辑器源文件(构建/复制到 public/)
-├── scripts/fetch-holidays.ts
+│   └── editor-page.html    # 编辑器源文件(复制到 public/)
+├── scripts/
+│   ├── build-assets.ts     # 静态资源内联构建脚本(pnpm build:assets)
+│   └── fetch-holidays.ts   # 拉取 holiday-cn 官方数据
 ├── verify/verify.ts        # 验证套件
 ├── data/holiday-cn/*.json  # 节假日数据缓存(入库保证可复现)
 └── dist/                   # 本地构建产物(不入库)

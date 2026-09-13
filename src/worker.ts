@@ -32,6 +32,7 @@ import { sha256Hex } from './crypto-utils.js';
 import { privateSubscribeToken } from './private-token.js';
 import { indexHtml, type BuildSummaryRow } from './render-html.js';
 import { stripNullValues } from './yaml-dump.js';
+import { STATIC_ASSETS } from './assets.generated.js';
 
 // ============================================================
 // 环境变量与 KV 绑定类型
@@ -345,7 +346,14 @@ export default {
       return jsonResponse({ ok: true, calendars: PUBLIC_CALENDARS.length, kv: !!env.CAL_KV });
     }
 
-    // 其他路由由静态资源(assets)处理,返回 404
+    // ---- 静态资源(内联,不依赖 wrangler assets 功能) ----
+    const staticAsset = STATIC_ASSETS.find((a) => a.route === path);
+    if (staticAsset) {
+      return new Response(staticAsset.content, {
+        headers: { 'content-type': staticAsset.contentType },
+      });
+    }
+
     return new Response('Not Found', { status: 404 });
   },
 };

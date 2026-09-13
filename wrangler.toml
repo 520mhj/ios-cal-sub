@@ -25,11 +25,10 @@ compatibility_date = "2024-09-01"
 SITE_NAME = "iOS 日历订阅"
 
 # ============================================================
-# 静态资源目录:qrcode.min.js、编辑器页面等
-# Worker 处理动态路由(.ics、/api/*、/),静态文件由此目录托管
+# 静态资源已内联到 Worker 中(src/assets.generated.ts),
+# 由 pnpm build:assets 从 public/ 目录生成。
+# 不使用 wrangler [assets] 功能,兼容 wrangler 3.x/4.x 和 Git 集成部署。
 # ============================================================
-[assets]
-directory = "public"
 
 # ============================================================
 # 敏感变量在 Cloudflare Dashboard 中设置:

@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "build:assets": "tsx scripts/build-assets.ts",
     "cal:fetch": "tsx scripts/fetch-holidays.ts",
     "cal:build": "tsx src/generate.ts",
     "cal:verify": "tsx verify/verify.ts",
