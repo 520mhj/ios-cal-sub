@@ -33,7 +33,7 @@ Fork 者拿到的代码只含公开的中国节假日日历,你的生日、纪�
 │  Cloudflare Workers(你的账号)                        │
 │  ├── Worker 动态生成 .ics(无需构建步骤)             │
 │  ├── KV Namespace(CAL_KV)存私人日历配置             │
-│  └── Secret(EDITOR_KEY_SHA256)UUID 密钥哈希         │
+│  └── Secret(EDITOR_KEY)UUID 访问密钥(加密存储)        │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -77,16 +77,13 @@ Fork 者拿到的代码只含公开的中国节假日日历,你的生日、纪�
 ### 第 4 步 · 设置访问密钥(UUID)
 
 1. 生成一个 UUID:[uuidgenerator.dev](https://uuidgenerator.dev/) 或本地 `pnpm cal:key`
-2. 计算 UUID 的 SHA-256:
-   ```bash
-   echo -n "你的-UUID" | sha256sum
-   ```
-3. Worker → **Settings** → **Variables and Secrets** → **Add** → 选 **Secret**
-   - **Variable name**: `EDITOR_KEY_SHA256`
-   - **Value**: 上一步算出的 64 位 SHA-256 哈希
-4. 点 **保存**
+2. Worker → **Settings** → **Variables and Secrets** → **Add** → 选 **Secret**
+   - **Variable name**: `EDITOR_KEY`
+   - **Value**: 上一步生成的 UUID(原样粘贴,不需要算哈希)
+3. 点 **保存**
 
-> 这个 UUID 用于:① 解锁在线编辑器;② 派生私密订阅令牌。服务端只存 SHA-256 哈希,不存原始 UUID。
+> 这个 UUID 用于:① 解锁在线编辑器;② 派生私密订阅令牌。Secret 在 Cloudflare 加密存储,
+> Worker 运行时才能读取,不进代码、不进仓库、不暴露在任何公开页面。
 
 ### 第 5 步 · 重新部署(使 KV 和 Secret 生效)
 
@@ -197,9 +194,9 @@ pnpm cal:fetch
 ## 🔐 隐私与安全
 
 - **私人日历配置**存在 Cloudflare KV 中,**不进 Git 仓库**,Fork 者看不到
-- **访问密钥**只存 SHA-256 哈希(Secret),原始 UUID 只在你浏览器的 sessionStorage 中
+- **访问密钥**以 Secret 形式加密存储在 Cloudflare,原始 UUID 只在你浏览器的 sessionStorage 中
 - **私密订阅链接**含派生令牌,每个日历独立;泄露一个链接不影响其他日历
-- **轮换密钥**:重新设置 `EDITOR_KEY_SHA256` 会使所有旧私密链接失效,需重新复制
+- **轮换密钥**:重新设置 `EDITOR_KEY` 会使所有旧私密链接失效,需重新复制
 - `calendars.private.yaml`(迁移用)已加入 `.gitignore`,不会误提交
 
 ---

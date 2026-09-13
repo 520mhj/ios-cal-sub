@@ -40,7 +40,7 @@ interface Env {
   /** KV 命名空间(可选):存储私人日历配置。未配置时仅公开日历可用。 */
   CAL_KV?: KVNamespace;
   /** UUID 密钥的 SHA-256 十六进制(64位小写),在 Dashboard Variables and Secrets 中设置 */
-  EDITOR_KEY_SHA256?: string;
+  EDITOR_KEY?: string;
   /** 站点公开地址,如 https://ios-cal-sub.workers.dev */
   SITE_BASE_URL?: string;
   SITE_NAME?: string;
@@ -119,21 +119,20 @@ async function getMergedConfig(env: Env): Promise<AppConfig> {
   return cfg;
 }
 
-/** 鉴权:请求头 X-Editor-Key 中的 UUID 的 SHA-256 是否匹配 */
+/** 鉴权:请求头 X-Editor-Key 中的 UUID 是否匹配(直接比对,不存哈希) */
 async function checkAuth(request: Request, env: Env): Promise<boolean> {
-  const expected = env.EDITOR_KEY_SHA256;
+  const expected = env.EDITOR_KEY;
   if (!expected) return false;
   const key = request.headers.get('X-Editor-Key') ?? '';
   if (!key) return false;
-  const actual = await sha256Hex(key.trim().toLowerCase());
-  return actual === expected.toLowerCase();
+  return key.trim().toLowerCase() === expected.trim().toLowerCase();
 }
 
 /** 生成单个日历的 .ics 内容 */
 async function generateIcs(
   cal: CalendarDef,
   cfg: AppConfig,
-  keySha256?: string,
+  editorKey?: string,
 ): Promise<{ ics: string; file: string }> {
   const win = buildWindow(cfg.defaults.years_ahead);
   const occs: Occurrence[] = [];
@@ -165,8 +164,8 @@ async function generateIcs(
 
   let file = `${cal.id}.ics`;
   if (cal.access === 'private') {
-    if (!keySha256) throw new Error(`私密日历「${cal.name}」需要访问密钥`);
-    const token = await privateSubscribeToken(keySha256, cal.id);
+    if (!editorKey) throw new Error(`私密日历「${cal.name}」需要访问密钥`);
+    const token = await privateSubscribeToken(editorKey, cal.id);
     file = `s/${token}/${cal.id}.ics`;
   }
 
@@ -174,7 +173,7 @@ async function generateIcs(
 }
 
 /** 生成首页所需的摘要行 */
-async function buildSummaryRows(cfg: AppConfig, keySha256?: string): Promise<BuildSummaryRow[]> {
+async function buildSummaryRows(cfg: AppConfig, editorKey?: string): Promise<BuildSummaryRow[]> {
   const rows: BuildSummaryRow[] = [];
   for (const cal of cfg.calendars) {
     const win = buildWindow(cfg.defaults.years_ahead);
@@ -192,8 +191,8 @@ async function buildSummaryRows(cfg: AppConfig, keySha256?: string): Promise<Bui
     const first = count > 0 ? occs[0]!.start : '-';
     const last = count > 0 ? occs[occs.length - 1]!.start : '-';
     let file = `${cal.id}.ics`;
-    if (cal.access === 'private' && keySha256) {
-      const token = await privateSubscribeToken(keySha256, cal.id);
+    if (cal.access === 'private' && editorKey) {
+      const token = await privateSubscribeToken(editorKey, cal.id);
       file = `s/${token}/${cal.id}.ics`;
     }
     rows.push({ id: cal.id, name: cal.name, file, count, first, last, access: cal.access });
@@ -280,9 +279,11 @@ export default {
 
     // ---- API: 编辑器门禁状态 ----
     if (path === '/editor/auth.json' && method === 'GET') {
+      // 返回 UUID 的 SHA-256 供前端比对(不直接返回 UUID,避免泄露)
+      const keySha256 = env.EDITOR_KEY ? await sha256Hex(env.EDITOR_KEY) : '';
       return jsonResponse({
-        enabled: !!env.EDITOR_KEY_SHA256,
-        sha256: env.EDITOR_KEY_SHA256 ?? '',
+        enabled: !!env.EDITOR_KEY,
+        sha256: keySha256,
         hint: '',
       });
     }
@@ -297,12 +298,12 @@ export default {
         return new Response('Not Found', { status: 404 });
       }
       // 验证令牌
-      if (!env.EDITOR_KEY_SHA256) return new Response('Service Unavailable', { status: 503 });
-      const expectedToken = await privateSubscribeToken(env.EDITOR_KEY_SHA256, calId);
+      if (!env.EDITOR_KEY) return new Response('Service Unavailable', { status: 503 });
+      const expectedToken = await privateSubscribeToken(env.EDITOR_KEY, calId);
       if (token !== expectedToken) {
         return new Response('Forbidden', { status: 403 });
       }
-      const { ics } = await generateIcs(cal, cfg, env.EDITOR_KEY_SHA256);
+      const { ics } = await generateIcs(cal, cfg, env.EDITOR_KEY);
       return new Response(ics, {
         headers: { 'content-type': 'text/calendar; charset=utf-8' },
       });
@@ -326,7 +327,7 @@ export default {
     // ---- 首页 ----
     if (path === '/' || path === '/index.html') {
       const cfg = await getMergedConfig(env);
-      const rows = await buildSummaryRows(cfg, env.EDITOR_KEY_SHA256);
+      const rows = await buildSummaryRows(cfg, env.EDITOR_KEY);
       // 首页只展示公开日历
       const publicRows = rows.filter((r) => r.access === 'public');
       const html = indexHtml(

@@ -35,10 +35,11 @@ directory = "public"
 # 敏感变量在 Cloudflare Dashboard 中设置:
 #   Worker → Settings → Variables and Secrets → Add variable/secret
 #
-#   EDITOR_KEY_SHA256 (Secret 类型)
-#     值: UUID 密钥的 SHA-256 十六进制(64位小写)
-#     生成: echo -n "你的UUID" | sha256sum
+#   EDITOR_KEY (Secret 类型)
+#     值: UUID 访问密钥(原样,非哈希)
+#     生成: https://uuidgenerator.dev 或 pnpm cal:key
 #     用途: 解锁在线编辑器 + 派生私密订阅令牌
+#     安全: Secret 加密存储,Worker 运行时才能读取;不进代码、不进仓库
 #
 #   SITE_BASE_URL (Variable 类型,可选)
 #     值: 你的 Worker 域名,如 https://ios-cal-sub.xxx.workers.dev
