@@ -1,21 +1,22 @@
 {
   "name": "ios-cal-sub",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "iOS 日历订阅生成器:配置驱动生成静态 .ics(中国节假日调休补班 / 农历生日 / 自定义周期事件)",
+  "description": "iOS 日历订阅:Cloudflare Workers + KV 动态生成,私人配置不进公开仓库",
   "engines": {
     "node": ">=20"
   },
   "packageManager": "pnpm@11.22.0",
   "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
     "cal:fetch": "tsx scripts/fetch-holidays.ts",
     "cal:build": "tsx src/generate.ts",
     "cal:verify": "tsx verify/verify.ts",
     "cal:web": "tsx src/web/server.ts",
-    "cal:key": "tsx src/keygen.ts",
-    "cal:all": "pnpm cal:build && pnpm cal:verify"
+    "cal:key": "tsx src/keygen.ts"
   },
   "dependencies": {
     "lunar-typescript": "^1.8.6",
@@ -23,9 +24,11 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240901.0",
     "@types/node": "^26.2.0",
     "ts-ics": "^2.4.6",
     "tsx": "^4.23.12",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wrangler": "^3.78.0"
   }
 }

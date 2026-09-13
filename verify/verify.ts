@@ -14,7 +14,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { convertIcsCalendar } from 'ts-ics';
 import { parse as parseYaml } from 'yaml';
-import { lunarToSolar, solarTermDatesInRange, expandSource, loadHolidayData } from '../src/sources.js';
+import { lunarToSolar, solarTermDatesInRange, expandSource } from '../src/sources.js';
+import { loadHolidayData } from '../src/holiday-data-fs.js';
 import { configSchema } from '../src/types.js';
 import type { Occurrence } from '../src/types.js';
 import { dumpYaml, stripNullValues } from '../src/yaml-dump.js';
@@ -154,9 +155,9 @@ console.log('\n━━ 4. 配置 ↔ 产物全量一致性 ━━');
       }
       let expected: Occurrence[] = [];
       try {
-        expected = cal.sources.flatMap((s) =>
-          expandSource(s, { win, calId: cal.id, holidayData }),
-        );
+        expected = (await Promise.all(
+          cal.sources.map((s) => expandSource(s, { win, calId: cal.id, holidayData })),
+        )).flat();
       } catch (e) {
         fail(`展开配置时出错:${(e as Error).message}`);
         continue;

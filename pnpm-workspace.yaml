@@ -1,3 +1,5 @@
 # 允许执行构建脚本的依赖(pnpm v11 的 allowBuilds 机制)
 allowBuilds:
   esbuild: true
+  sharp: true
+  workerd: true

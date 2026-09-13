@@ -7,11 +7,8 @@ import { parse as parseYaml } from 'yaml';
 import { configSchema, type AppConfig, type Occurrence } from './types.js';
 import { buildIcs } from './ics.js';
 import { dumpYaml, stripNullValues } from './yaml-dump.js';
-import {
-  buildWindow,
-  expandSource,
-  loadHolidayData,
-} from './sources.js';
+import { buildWindow, expandSource } from './sources.js';
+import { loadHolidayData } from './holiday-data-fs.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -266,7 +263,7 @@ export async function buildCalendars(opts: BuildOptions): Promise<BuildResult> {
   for (const cal of cfg.calendars) {
     const occs: Occurrence[] = [];
     for (const src of cal.sources) {
-      occs.push(...expandSource(src, { win, calId: cal.id, holidayData }));
+      occs.push(...(await expandSource(src, { win, calId: cal.id, holidayData })));
     }
     occs.sort((a, b) => (a.start === b.start ? a.uid.localeCompare(b.uid) : a.start < b.start ? -1 : 1));
 

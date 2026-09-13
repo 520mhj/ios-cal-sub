@@ -1,7 +1,5 @@
 /** 事件源展开:把配置中的各类型 source 展开为窗口内的具体事件 */
-import { createHash } from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
+import { sha1Hex } from './crypto-utils.js';
 import { Lunar, LunarMonth, Solar } from 'lunar-typescript';
 import {
   LUNAR_FESTIVALS,
@@ -38,12 +36,9 @@ export function buildWindow(yearsAhead: number): Window {
 }
 
 /** 稳定 UID:同一逻辑事件的 UID 永不变化,订阅端更新时是"修改"而非"重复新增" */
-export function makeUid(calId: string, ...parts: (string | number)[]): string {
-  const h = createHash('sha1')
-    .update([calId, ...parts].join('|'))
-    .digest('hex')
-    .slice(0, 20);
-  return `${h}@${calId}`;
+export async function makeUid(calId: string, ...parts: (string | number)[]): Promise<string> {
+  const h = await sha1Hex([calId, ...parts].join('|'));
+  return `${h.slice(0, 20)}@${calId}`;
 }
 
 function mergeAlarms(
@@ -81,33 +76,6 @@ function festEmoji(name: string): string {
   return '📅';
 }
 
-export async function loadHolidayData(
-  dataDir: string,
-  win: Window,
-): Promise<Map<number, HolidayCnYear>> {
-  const map = new Map<number, HolidayCnYear>();
-  const firstYear = Number(win.start.slice(0, 4));
-  const lastYear = Number(win.end.slice(0, 4));
-  for (let y = firstYear; y <= lastYear; y++) {
-    const p = path.join(dataDir, `${y}.json`);
-    if (!fs.existsSync(p)) {
-      console.warn(`⚠️ 缺少 ${y} 年节假日数据(data/holiday-cn/${y}.json 不存在)——公告可能尚未发布`);
-      continue;
-    }
-    try {
-      const json = JSON.parse(await fs.promises.readFile(p, 'utf8')) as HolidayCnYear;
-      if (!Array.isArray(json.days)) throw new Error('缺少 days 数组');
-      if (json.days.length === 0) {
-        console.warn(`⏳ ${y} 年节假日数据为空占位(国务院公告尚未发布),该年份将不生成假日事件`);
-        continue;
-      }
-      map.set(y, json);
-    } catch (e) {
-      console.warn(`⚠️ 跳过损坏的节假日数据 ${p}: ${(e as Error).message}`);
-    }
-  }
-  return map;
-}
 
 /**
  * 法定假期里"真正的节日当天"解析:名称匹配到哪条规则,就用它算出当年的节日公历日。
@@ -133,7 +101,7 @@ function festivalDatesFor(name: string, year: number): Set<string> {
   return out;
 }
 
-export function expandHolidaysCn(
+export async function expandHolidaysCn(
   src: HolidayCnSource,
   data: Map<number, HolidayCnYear>,
   win: Window,
@@ -190,7 +158,7 @@ export function expandHolidaysCn(
           '数据来源:NateScarlet/holiday-cn',
         ];
         out.push({
-          uid: makeUid(calId, 'holiday-cn', day.date),
+          uid: await makeUid(calId, 'holiday-cn', day.date),
           start: day.date,
           end: addDays(day.date, 1),
           time: null,
@@ -200,7 +168,7 @@ export function expandHolidaysCn(
         });
       } else {
         out.push({
-          uid: makeUid(calId, 'holiday-workday', day.date),
+          uid: await makeUid(calId, 'holiday-workday', day.date),
           start: day.date,
           end: addDays(day.date, 1),
           time: null,
@@ -229,7 +197,7 @@ export function lunarToSolar(lunarYear: number, m: number, d: number): string | 
   return Lunar.fromYmd(lm.getYear(), lm.getMonth(), day).getSolar().toYmd();
 }
 
-export function expandLunar(
+export async function expandLunar(
   src: LunarSource,
   win: Window,
   calId: string,
@@ -261,7 +229,7 @@ export function expandLunar(
     if (src.note) descParts.push(src.note);
 
     out.push({
-      uid: makeUid(calId, `lunar-${src.title}`, solarDate),
+      uid: await makeUid(calId, `lunar-${src.title}`, solarDate),
       start: solarDate,
       end: addDays(solarDate, 1),
       time: src.time ?? null,
@@ -275,7 +243,7 @@ export function expandLunar(
 
 /** ---------- 固定公历日期(每年一次) ---------- */
 
-export function expandSolar(
+export async function expandSolar(
   src: SolarSource,
   win: Window,
   calId: string,
@@ -292,7 +260,7 @@ export function expandSolar(
     const descParts = [`每年 ${MM}-${String(src.day).padStart(2, '0')}`];
     if (src.note) descParts.push(src.note);
     out.push({
-      uid: makeUid(calId, `solar-${src.title}`, date),
+      uid: await makeUid(calId, `solar-${src.title}`, date),
       start: date,
       end: addDays(date, 1),
       time: src.time ?? null,
@@ -317,7 +285,7 @@ function inRange(date: string, range: Window): boolean {
   return cmpDate(date, range.start) >= 0 && cmpDate(date, range.end) <= 0;
 }
 
-export function expandRule(
+export async function expandRule(
   src: RuleSource,
   win: Window,
   calId: string,
@@ -350,7 +318,7 @@ export function expandRule(
     if (cmpDate(d, range.end) <= 0)
       return [{
         ...base,
-        uid: makeUid(calId, `rule-${src.title}`, 'weekly'),
+        uid: await makeUid(calId, `rule-${src.title}`, 'weekly'),
         start: d,
         end: addDays(d, 1),
         rrule: `FREQ=WEEKLY;UNTIL=${until}`,
@@ -366,7 +334,7 @@ export function expandRule(
         if (cmpDate(date, range.end) > 0) return [];
         return [{
           ...base,
-          uid: makeUid(calId, `rule-${src.title}`, 'monthly'),
+          uid: await makeUid(calId, `rule-${src.title}`, 'monthly'),
           start: date,
           end: addDays(date, 1),
           rrule: `FREQ=MONTHLY;UNTIL=${until}`,
@@ -384,7 +352,7 @@ export function expandRule(
         if (cmpDate(date, range.end) > 0) return [];
         return [{
           ...base,
-          uid: makeUid(calId, `rule-${src.title}`, 'yearly'),
+          uid: await makeUid(calId, `rule-${src.title}`, 'yearly'),
           start: date,
           end: addDays(date, 1),
           rrule: `FREQ=YEARLY;UNTIL=${until}`,
@@ -433,12 +401,12 @@ export function expandRule(
     }
   }
 
-  return dates.map((date) => ({
+  return await Promise.all(dates.map(async (date) => ({
     ...base,
-    uid: makeUid(calId, `rule-${src.title}`, date),
+    uid: await makeUid(calId, `rule-${src.title}`, date),
     start: date,
     end: addDays(date, 1),
-  }));
+  })));
 }
 
 /** ---------- 节气事件 ---------- */
@@ -468,7 +436,7 @@ export function solarTermDatesInRange(win: Window): Map<string, string[]> {
   return sorted;
 }
 
-export function expandSolarTerm(
+export async function expandSolarTerm(
   src: SolarTermSource,
   win: Window,
   calId: string,
@@ -497,7 +465,7 @@ export function expandSolarTerm(
         descParts.push(`起点:${src.term}${src.offset_days > 0 ? '后' : '前'}第 ${Math.abs(src.offset_days)} 天`);
       if (src.note) descParts.push(src.note);
       out.push({
-        uid: makeUid(calId, `term-${src.term}-${src.offset_days}`, date),
+        uid: await makeUid(calId, `term-${src.term}-${src.offset_days}`, date),
         start: date,
         end: addDays(date, 1),
         time: src.time ?? null,
@@ -515,7 +483,7 @@ export function expandSolarTerm(
 
 /** ---------- 农历传统节日(预设定义在 types.ts,单一事实源) ---------- */
 
-export function expandLunarFestival(
+export async function expandLunarFestival(
   src: LunarFestivalSource,
   win: Window,
   calId: string,
@@ -537,7 +505,7 @@ export function expandLunarFestival(
     for (const solar of solarTermDatesInRange(win).get(preset.term) ?? []) {
       if (cmpDate(solar, win.start) < 0 || cmpDate(solar, win.end) > 0) continue;
       out.push({
-        uid: makeUid(calId, `lf-${src.festival}`, solar),
+        uid: await makeUid(calId, `lf-${src.festival}`, solar),
         start: solar,
         end: addDays(solar, 1),
         time: src.time ?? null,
@@ -568,7 +536,7 @@ export function expandLunarFestival(
     if (!solar) continue;
     if (cmpDate(solar, win.start) < 0 || cmpDate(solar, win.end) > 0) continue;
     out.push({
-      uid: makeUid(calId, `lf-${src.festival}`, solar),
+      uid: await makeUid(calId, `lf-${src.festival}`, solar),
       start: solar,
       end: addDays(solar, 1),
       time: src.time ?? null,
@@ -582,7 +550,7 @@ export function expandLunarFestival(
 
 /** ---------- 二十四节气(全部一次性展开) ---------- */
 
-export function expandSolarTermsAll(
+export async function expandSolarTermsAll(
   src: SolarTermsSource,
   win: Window,
   calId: string,
@@ -594,7 +562,7 @@ export function expandSolarTermsAll(
     for (const d of dates) {
       if (cmpDate(d, win.start) < 0 || cmpDate(d, win.end) > 0) continue;
       out.push({
-        uid: makeUid(calId, `terms-all-${term}`, d),
+        uid: await makeUid(calId, `terms-all-${term}`, d),
         start: d,
         end: addDays(d, 1),
         time: src.time ?? null,
@@ -609,25 +577,25 @@ export function expandSolarTermsAll(
 
 /** ---------- 总入口 ---------- */
 
-export function expandSource(
+export async function expandSource(
   src: Source,
   ctx: { win: Window; calId: string; holidayData?: Map<number, HolidayCnYear> },
-): Occurrence[] {
+): Promise<Occurrence[]> {
   switch (src.type) {
     case 'holidays-cn':
       if (!ctx.holidayData) throw new Error('holidays-cn 数据未加载');
-      return expandHolidaysCn(src, ctx.holidayData, ctx.win, ctx.calId);
+      return await expandHolidaysCn(src, ctx.holidayData, ctx.win, ctx.calId);
     case 'lunar':
-      return expandLunar(src, ctx.win, ctx.calId);
+      return await expandLunar(src, ctx.win, ctx.calId);
     case 'solar':
-      return expandSolar(src, ctx.win, ctx.calId);
+      return await expandSolar(src, ctx.win, ctx.calId);
     case 'rule':
-      return expandRule(src, ctx.win, ctx.calId);
+      return await expandRule(src, ctx.win, ctx.calId);
     case 'solar-term':
-      return expandSolarTerm(src, ctx.win, ctx.calId);
+      return await expandSolarTerm(src, ctx.win, ctx.calId);
     case 'lunar-festival':
-      return expandLunarFestival(src, ctx.win, ctx.calId);
+      return await expandLunarFestival(src, ctx.win, ctx.calId);
     case 'solar-terms':
-      return expandSolarTermsAll(src, ctx.win, ctx.calId);
+      return await expandSolarTermsAll(src, ctx.win, ctx.calId);
   }
 }

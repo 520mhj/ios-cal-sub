@@ -1,12 +1,26 @@
+# ============================================================
+# ios-cal-sub · 公开示例配置
+# ============================================================
+# 此文件只包含公开日历(cn-holidays),fork 者拿到代码即有一个可用的
+# 中国节假日与调休日历。
+#
+# 私人日历(生日、纪念日、打卡、循环事项等)不写在此文件中,
+# 而是存储在 Cloudflare KV 中,通过在线编辑器(/editor/)管理。
+# 这样公开仓库中不会泄露任何私人信息。
+#
+# 本地构建(pnpm cal:build)仍会读取此文件,用于离线验证和开发。
+# ============================================================
+
 site_base_url: ""
 defaults:
   timezone: "Asia/Shanghai"
   years_ahead: 2
   timezone_emoji: true
+
 calendars:
   - id: "cn-holidays"
     name: "🇨🇳 中国节假日与调休"
-    description: "法定节假日休息日 + 调休补班提醒 + 传统节日"
+    description: "法定节假日休息日 + 调休补班提醒 + 传统节日 + 二十四节气"
     sources:
       - type: "holidays-cn"
         include_rest_days: true
@@ -58,70 +72,3 @@ calendars:
         festival: "除夕"
       - type: "solar-terms"
     access: "public"
-  - id: "family-days"
-    name: "🎂 家人生日与纪念日"
-    description: "农历自动换算公历,逐年展开"
-    sources:
-      - type: "lunar"
-        title: "妈妈·生日"
-        alarm_days_before:
-          - 1
-        lunar_month: 8
-        lunar_day: 15
-        birth_year: 1965
-        kind: "birthday"
-      - type: "solar"
-        title: "结婚纪念日"
-        alarm_days_before:
-          - 7
-        month: 10
-        day: 2
-    access: "public"
-  - id: "jieqi-notes"
-    name: "⛅ 节气提醒"
-    description: "二十四节气锚定,支持前一天预告与连续多天打卡"
-    sources:
-      - type: "solar-term"
-        title: "明天春分·扳指见龙脊"
-        time: "11:30"
-        alarms:
-          - "-PT15M"
-        alarm_days_before:
-          - 1
-        term: "春分"
-        offset_days: 0
-        days: 90
-      - type: "solar-term"
-        title: "端午节·凤交颈·36下"
-        time: "11:20"
-        alarms:
-          - "-PT1H"
-        term: "夏至"
-        offset_days: -2
-        days: 92
-      - type: "solar-term"
-        title: "处暑打虫·服用菊桂化骨散"
-        time: "16:00"
-        alarms:
-          - "-PT10M"
-        alarm_days_before:
-          - 1
-        term: "处暑"
-        offset_days: 0
-        days: 5
-    access: "private"
-  - id: "recurring"
-    name: "⏰ 固定循环事项"
-    sources:
-      - type: "rule"
-        title: "每月必做·爸爸200花费、两个手机卡各50、家里电费各100"
-        note: "爸爸200花费、两个手机卡各50、家里电费各100"
-        time: "19:40"
-        alarms:
-          - "-P1D"
-          - "-PT1H"
-        alarm_days_before:
-          - 0
-        freq: "monthly"
-        day: 15
-    access: "private"
