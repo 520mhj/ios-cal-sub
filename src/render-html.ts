@@ -29,8 +29,8 @@ export function indexHtml(
 ): string {
   const base = siteBaseUrl?.replace(/\/+$/, '') ?? '';
   const host = base.replace(/^https?:\/\//, '');
-  // HTTPS 站点用 webcals://(安全),HTTP 站点用 webcal://
-  const webcalProto = base.startsWith('https://') ? 'webcals://' : 'webcal://';
+  // 统一用 webcals://(安全协议,转 https://),避免 iOS 提示不安全连接
+  const webcalProto = 'webcals://';
 
   const subscribeArea = (r: BuildSummaryRow) => {
     if (r.access === 'private') {
