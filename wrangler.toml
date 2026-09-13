@@ -3,22 +3,18 @@ main = "src/worker.ts"
 compatibility_date = "2024-09-01"
 
 # ============================================================
-# KV 命名空间(可选,用于存储私人日历配置)
+# KV 命名空间(用于存储私人日历配置)
 #
-# 方式一:Cloudflare Dashboard 中添加(推荐,无需改代码)
-#   Worker → Settings → Bindings → Add binding → KV
-#   Variable name: CAL_KV
-#   Namespace: 选择已有的,或点 "Create a namespace" 新建(名称随意)
+# 只写 binding,不写 id —— 部署时 Cloudflare 自动创建 namespace 并绑定
+# (wrangler@4.45.0+ 的 Automatic resource provisioning 功能)
 #
-# 方式二:wrangler CLI 创建并写死 id
-#   npx wrangler kv namespace create CAL_KV
-#   把返回的 id 填到下面,然后取消注释
+# 首次部署后,Cloudflare 会自动把 namespace id 回写到此文件;
+# 即使不写回,后续部署也会保持绑定,不会丢失。
 #
 # 不配置 KV 时:公开日历(cn-holidays)正常可用,私人日历/编辑器功能不可用。
 # ============================================================
-# [[kv_namespaces]]
-# binding = "CAL_KV"
-# id = "你的_KV_namespace_id"
+[[kv_namespaces]]
+binding = "CAL_KV"
 
 # 非敏感变量(可公开进仓库)
 [vars]
