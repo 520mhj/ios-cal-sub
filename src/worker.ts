@@ -216,6 +216,7 @@ function jsonResponse(data: unknown, status = 200): Response {
 // ============================================================
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    try {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
@@ -358,5 +359,15 @@ export default {
     }
 
     return new Response('Not Found', { status: 404 });
+    } catch (err) {
+      // 全局错误处理:返回详细错误信息,方便调试
+      const msg = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : '';
+      console.error('[Worker Error]', msg, stack);
+      return new Response(
+        `Worker Error: ${msg}\n\nStack:\n${stack}`,
+        { status: 500, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+      );
+    }
   },
 };
