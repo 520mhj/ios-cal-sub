@@ -37,8 +37,9 @@ import { stripNullValues } from './yaml-dump.js';
 // 环境变量与 KV 绑定类型
 // ============================================================
 interface Env {
-  CAL_KV: KVNamespace;
-  /** UUID 密钥的 SHA-256 十六进制(64位小写),用 wrangler secret put 设置 */
+  /** KV 命名空间(可选):存储私人日历配置。未配置时仅公开日历可用。 */
+  CAL_KV?: KVNamespace;
+  /** UUID 密钥的 SHA-256 十六进制(64位小写),在 Dashboard Variables and Secrets 中设置 */
   EDITOR_KEY_SHA256?: string;
   /** 站点公开地址,如 https://ios-cal-sub.workers.dev */
   SITE_BASE_URL?: string;
@@ -87,8 +88,9 @@ const KV_KEY = 'calendars:private';
 // 工具函数
 // ============================================================
 
-/** 从 KV 读取私人日历配置 */
+/** 从 KV 读取私人日历配置(KV 未配置时返回空数组) */
 async function loadPrivateCalendars(env: Env): Promise<CalendarDef[]> {
+  if (!env.CAL_KV) return [];
   try {
     const raw = await env.CAL_KV.get(KV_KEY);
     if (!raw) return [];
@@ -102,6 +104,7 @@ async function loadPrivateCalendars(env: Env): Promise<CalendarDef[]> {
 
 /** 保存私人日历配置到 KV */
 async function savePrivateCalendars(env: Env, calendars: CalendarDef[]): Promise<void> {
+  if (!env.CAL_KV) throw new Error('KV namespace 未配置,请在 Cloudflare Dashboard → Bindings 中添加 CAL_KV');
   await env.CAL_KV.put(KV_KEY, JSON.stringify(calendars));
 }
 
@@ -236,6 +239,12 @@ export default {
     if (path === '/api/config' && method === 'POST') {
       if (!(await checkAuth(request, env))) {
         return jsonResponse({ ok: false, error: '未授权' }, 401);
+      }
+      if (!env.CAL_KV) {
+        return jsonResponse({
+          ok: false,
+          error: 'KV namespace 未配置。请在 Cloudflare Dashboard → Worker → Settings → Bindings → Add binding → KV,Variable name 填 CAL_KV,可新建 namespace。',
+        }, 503);
       }
       let body: unknown;
       try {

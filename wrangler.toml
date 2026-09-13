@@ -3,15 +3,22 @@ main = "src/worker.ts"
 compatibility_date = "2024-09-01"
 
 # ============================================================
-# KV 命名空间:存储私人日历配置
-# 创建步骤:
-#   1. wrangler kv namespace create CAL_KV
-#   2. 把返回的 id 填到下面
-#   3. fork 者需要创建自己的命名空间并替换 id
+# KV 命名空间(可选,用于存储私人日历配置)
+#
+# 方式一:Cloudflare Dashboard 中添加(推荐,无需改代码)
+#   Worker → Settings → Bindings → Add binding → KV
+#   Variable name: CAL_KV
+#   Namespace: 选择已有的,或点 "Create a namespace" 新建(名称随意)
+#
+# 方式二:wrangler CLI 创建并写死 id
+#   npx wrangler kv namespace create CAL_KV
+#   把返回的 id 填到下面,然后取消注释
+#
+# 不配置 KV 时:公开日历(cn-holidays)正常可用,私人日历/编辑器功能不可用。
 # ============================================================
-[[kv_namespaces]]
-binding = "CAL_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+# [[kv_namespaces]]
+# binding = "CAL_KV"
+# id = "你的_KV_namespace_id"
 
 # 非敏感变量(可公开进仓库)
 [vars]
@@ -25,12 +32,14 @@ SITE_NAME = "iOS 日历订阅"
 directory = "public"
 
 # ============================================================
-# 敏感变量用 `wrangler secret put` 设置,绝不写进此文件:
+# 敏感变量在 Cloudflare Dashboard 中设置:
+#   Worker → Settings → Variables and Secrets → Add variable/secret
 #
-#   wrangler secret put EDITOR_KEY_SHA256
+#   EDITOR_KEY_SHA256 (Secret 类型)
 #     值: UUID 密钥的 SHA-256 十六进制(64位小写)
 #     生成: echo -n "你的UUID" | sha256sum
 #     用途: 解锁在线编辑器 + 派生私密订阅令牌
 #
-# fork 者必须配置自己的 EDITOR_KEY_SHA256,否则编辑器和私密日历不可用。
+#   SITE_BASE_URL (Variable 类型,可选)
+#     值: 你的 Worker 域名,如 https://ios-cal-sub.xxx.workers.dev
 # ============================================================

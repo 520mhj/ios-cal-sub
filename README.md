@@ -43,83 +43,66 @@ Fork 者拿到的代码只含公开的中国节假日日历,你的生日、纪�
 
 ---
 
-## 🚀 快速开始(从 Fork 到手机响铃,约 10 分钟)
+## 🚀 快速开始(从 Fork 到手机响铃,约 5 分钟)
 
-### 第 1 步 · Fork 并安装依赖
+### 第 1 步 · Fork 仓库
 
-1. 点本仓库右上角 **Fork**,复制到你自己的账号
-2. 克隆到本地,安装依赖:
-   ```bash
-   git clone https://github.com/你的用户名/ios-cal-sub.git
-   cd ios-cal-sub
-   pnpm install
-   ```
+点本仓库右上角 **Fork**,复制到你自己的账号。
 
-### 第 2 步 · 准备访问密钥
+### 第 2 步 · Cloudflare 连接 Git 一键部署
 
-生成一个 UUID 作为访问密钥:
-```bash
-pnpm cal:key
-```
-或在线生成:[uuidgenerator.dev](https://uuidgenerator.dev/)
-
-> 这个 UUID 有两个用途:① 解锁在线编辑器;② 作为私密订阅令牌的派生源。
-> 服务端只存它的 SHA-256 哈希,不存原始 UUID。
-
-### 第 3 步 · 创建 KV 命名空间（仅手动部署方式需要）
-
-> 如果用 GitHub Actions 自动部署（方式二），此步可跳过，Actions 会自动创建 KV。
-
-```bash
-npx wrangler kv namespace create CAL_KV
-```
-复制返回的 `id`,替换 `wrangler.toml` 中的 `REPLACE_WITH_YOUR_KV_NAMESPACE_ID`。
-
-### 第 4 步 · 部署
-
-#### 方式一：手动部署（推荐首次使用）
-
-```bash
-# 设置 UUID 密钥的 SHA-256(把下面的 UUID 换成你自己的)
-echo -n "你的-UUID" | sha256sum | awk '{print $1}' | npx wrangler secret put EDITOR_KEY_SHA256
-
-# 部署
-npx wrangler deploy
-```
-
-#### 方式二：GitHub Actions 自动部署（push 即部署，自动创建 KV）
-
-1. 在 GitHub 仓库 → **Settings → Secrets and variables → Actions** 添加以下 Secrets:
-
-   | Name | Value | 说明 |
-   |---|---|---|
-   | `CLOUDFLARE_API_TOKEN` | Cloudflare API Token | 需权限:Workers Scripts:Edit + Account KV Storage:Edit |
-   | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID | Dashboard 右侧可复制 |
-   | `EDITOR_KEY_SHA256` | UUID 的 SHA-256(可选) | 不填则后续在 Dashboard 手动添加 |
-
-   > API Token 获取:Cloudflare Dashboard → 头像 → My Profile → API Tokens → Create Token → Use "Edit Cloudflare Workers" 模板 → 勾选 KV Storage 权限。
-
-2. push 到 `main` 分支,GitHub Actions 会自动:
-   - ✅ 检查 `CAL_KV` namespace 是否存在,不存在则自动创建
-   - ✅ 自动替换 `wrangler.toml` 中的 KV id 占位符
-   - ✅ 部署到 Cloudflare Workers
-   - ✅ 如果配置了 `EDITOR_KEY_SHA256`,自动设置为 Worker Secret
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → **创建应用**
+2. 选 **Workers** 标签 → **连接到 Git**
+3. 授权 GitHub,选择你 Fork 的 `ios-cal-sub` 仓库
+4. 部署设置:
+   - **生产分支**: `main`
+   - **构建命令**: 留空(wrangler 自动打包 TypeScript)
+   - **构建输出目录**: 留空
+5. 点 **保存并部署**,等待 ~30 秒部署完成
 
 部署成功后,你的服务地址是 `https://ios-cal-sub.<你的子域>.workers.dev`。
 
-> 也可以绑定自定义域名:Cloudflare Dashboard → Workers → ios-cal-sub → Settings → Domains & Routes。
+> 也可以绑定自定义域名:Worker → Settings → Domains & Routes → Add。
 
-### 第 5 步 · 在线编辑器:配置你自己的私人日历
+### 第 3 步 · 添加 KV Binding(存储私人日历)
+
+1. Worker → **Settings** → **Bindings** → **Add binding** → 选 **KV**
+2. **Variable name**: `CAL_KV`(必须 exactly 这个名字)
+3. **KV namespace**: 点下拉框 → **Create a namespace** → 名称随意(如 `ios-cal-sub-private`)→ 创建
+4. 点 **保存**
+
+> KV 用于存储你的私人日历配置(生日、纪念日、打卡内容等),不进公开仓库。
+> 不添加 KV 也能使用公开日历(cn-holidays),但私人日历和编辑器不可用。
+
+### 第 4 步 · 设置访问密钥(UUID)
+
+1. 生成一个 UUID:[uuidgenerator.dev](https://uuidgenerator.dev/) 或本地 `pnpm cal:key`
+2. 计算 UUID 的 SHA-256:
+   ```bash
+   echo -n "你的-UUID" | sha256sum
+   ```
+3. Worker → **Settings** → **Variables and Secrets** → **Add** → 选 **Secret**
+   - **Variable name**: `EDITOR_KEY_SHA256`
+   - **Value**: 上一步算出的 64 位 SHA-256 哈希
+4. 点 **保存**
+
+> 这个 UUID 用于:① 解锁在线编辑器;② 派生私密订阅令牌。服务端只存 SHA-256 哈希,不存原始 UUID。
+
+### 第 5 步 · 重新部署(使 KV 和 Secret 生效)
+
+Worker 页面右上角点 **重新部署**(或 push 任意改动触发自动部署)。
+
+### 第 6 步 · 在线编辑器:配置你自己的私人日历
 
 浏览器打开 `https://你的域名/editor/`:
 
-1. **解锁**:输入第 2 步的 UUID
+1. **解锁**:输入第 4 步的 UUID
 2. **编辑**:左侧切换日历,添加/修改事件源(农历生日、节气打卡、循环事项…);
    每个日历可切「🌐 公开 / 🔒 私密」——私密日历不在订阅页显示,
    专属链接在编辑页该日历区域复制
-3. **💾 保存到云端** → 配置写入 KV,**立即生效**(无需 CI 等待)
+3. **💾 保存到云端** → 配置写入 KV,**立即生效**
 
-### 第 6 步 · iPhone 订阅
+### 第 7 步 · iPhone 订阅
 
 打开订阅页 `https://你的域名/`,任选其一:
 
@@ -128,7 +111,7 @@ npx wrangler deploy
 - 或复制地址,在 iPhone **设置 → 应用 → 日历 → 日历账户 → 添加订阅日历** 里粘贴。
 - 🔒 私密日历:回编辑页该日历区域,链接旁同样有二维码(⚠️ 含专属令牌,只私下发给家人朋友)。
 
-### 第 7 步 · 开启提醒(重要,务必设置)
+### 第 8 步 · 开启提醒(重要,务必设置)
 
 文件内已按标准写入每条事件的提醒指令,但 **iOS 对"订阅式日历"整体忽略文件内提醒**。一次设置解决:
 
@@ -197,7 +180,7 @@ pnpm install
 pnpm cal:build
 pnpm cal:verify
 
-# 本地启动 Worker(需先创建 KV namespace 并配置 wrangler.toml)
+# 本地启动 Worker(KV 可选,未配置时仅公开日历可用)
 pnpm dev          # wrangler dev,本地 http://localhost:8787
 
 # 生成访问密钥
@@ -256,8 +239,7 @@ iOS 忽略订阅源的文件内提醒。按「第 7 步」设置默认提醒时�
 
 ```
 ios-cal-sub/
-├── wrangler.toml          # ★ Workers 配置(KV binding、assets、compatibility_date)
-├── .github/workflows/deploy.yml  # GitHub Actions 自动部署(自动创建 KV)
+├── wrangler.toml          # ★ Workers 配置(KV binding 可选、assets、compatibility_date)
 ├── calendars.yaml          # 公开示例配置(仅本地构建用,私人日历不写这里)
 ├── calendars.private.yaml  # 私人日历迁移文件(.gitignore,不入库)
 ├── public/                 # 静态资源(编辑器页面、二维码库、yaml-dump.js)
