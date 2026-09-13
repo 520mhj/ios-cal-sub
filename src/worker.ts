@@ -112,10 +112,13 @@ async function savePrivateCalendars(env: Env, calendars: CalendarDef[]): Promise
 /** 合并内置公开配置 + KV 私人配置 */
 async function getMergedConfig(env: Env, siteBaseUrl = ''): Promise<AppConfig> {
   const privateCals = await loadPrivateCalendars(env);
+  // 合并时去重:KV 中的日历覆盖公开日历中相同 id 的(用户修改了内置日历后,以 KV 为准)
+  const privateIds = new Set(privateCals.map((c) => c.id));
+  const mergedPublic = PUBLIC_CALENDARS.filter((c) => !privateIds.has(c.id));
   const cfg: AppConfig = {
     site_base_url: siteBaseUrl,
     defaults: { ...DEFAULTS },
-    calendars: [...PUBLIC_CALENDARS, ...privateCals],
+    calendars: [...mergedPublic, ...privateCals],
   };
   return cfg;
 }
@@ -260,11 +263,13 @@ export default {
       if (!Array.isArray(body)) {
         return jsonResponse({ ok: false, error: '请求体必须是日历配置数组' }, 400);
       }
-      // 用完整配置(公开+私人)过 zod 校验
+      // 用完整配置(公开+私人)过 zod 校验,合并时去重(KV 中的覆盖公开的)
+      const bodyIds = new Set((body as CalendarDef[]).map((c) => c.id));
+      const mergedPublic = PUBLIC_CALENDARS.filter((c) => !bodyIds.has(c.id));
       const fullCfg: AppConfig = {
         site_base_url: siteBaseUrl,
         defaults: { ...DEFAULTS },
-        calendars: [...PUBLIC_CALENDARS, ...(body as CalendarDef[])],
+        calendars: [...mergedPublic, ...(body as CalendarDef[])],
       };
       const parsed = configSchema.safeParse(stripNullValues(fullCfg));
       if (!parsed.success) {
@@ -274,10 +279,10 @@ export default {
           issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
         }, 400);
       }
-      // 只保存私人部分(公开部分内置在代码中)
-      const privateCals = parsed.data.calendars.filter(
-        (c) => !PUBLIC_CALENDARS.some((p) => p.id === c.id),
-      );
+      // 全部保存到 KV(包括用户修改后的内置日历,合并时会覆盖公开版本)
+      // 从校验后的数据中提取用户提交的部分(保持原始顺序)
+      const savedIds = new Set((body as CalendarDef[]).map((c) => c.id));
+      const privateCals = parsed.data.calendars.filter((c) => savedIds.has(c.id));
       await savePrivateCalendars(env, privateCals);
       return jsonResponse({ ok: true, saved: privateCals.length });
     }
