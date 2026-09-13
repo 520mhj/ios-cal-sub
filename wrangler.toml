@@ -5,16 +5,20 @@ compatibility_date = "2024-09-01"
 # ============================================================
 # KV 命名空间(用于存储私人日历配置)
 #
-# 只写 binding,不写 id —— 部署时 Cloudflare 自动创建 namespace 并绑定
-# (wrangler@4.45.0+ 的 Automatic resource provisioning 功能)
+# wrangler 3.x 要求必须写 id。获取方式:
+#   Cloudflare Dashboard → Workers & Pages → 左侧 KV
+#   → 点你的 namespace → 右上角复制 Namespace ID
 #
-# 首次部署后,Cloudflare 会自动把 namespace id 回写到此文件;
-# 即使不写回,后续部署也会保持绑定,不会丢失。
+# 没有 namespace?先创建:
+#   Dashboard → KV → Create a namespace → 名称随意(如 ios-cal-sub-private)
+#
+# ⚠️ 必须写在 wrangler.toml 中,否则每次 Git 集成部署会被覆盖丢失。
 #
 # 不配置 KV 时:公开日历(cn-holidays)正常可用,私人日历/编辑器功能不可用。
 # ============================================================
 [[kv_namespaces]]
 binding = "CAL_KV"
+id = "在此处填入你的_KV_namespace_id"
 
 # 非敏感变量(可公开进仓库)
 [vars]
