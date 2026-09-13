@@ -152,6 +152,9 @@ calendars:
         festival: 七夕节       # 春节/元宵节/龙抬头/清明节/上巳节/端午节/七夕节/中元节
                                # /中秋节/重阳节/寒衣节/下元节/腊八节/冬至🥟/小年(南北)/除夕
         alarm_days_before: [0] # 标题自动取节日名;除夕自动落腊月末;旧名"小年"按北方处理
+
+      - type: solar-terms     # 二十四节气(全部24个,一条配置即展开;标题自动取节气名)
+                               # 无需逐个写 solar-term;公共字段(time/alarms/note)对所有节气生效
 ```
 
 ### 各类型字段速查
@@ -164,6 +167,7 @@ calendars:
 | `rule` | `title` `freq`(+ 按 freq:`weekday`/`day`/`month+day`/`date`) | `start` `end` 及公共字段 |
 | `solar-term` | `title` `term`(二十四节气名) | `offset_days`(±183)、`days`(1~366)及公共字段 |
 | `lunar-festival` | `festival`(内置节日名) | 公共字段(`title` 自动取节日名,可不填)|
+| `solar-terms` | —(一条展开全部24节气) | 公共字段(`title` 不需要,自动取节气名)|
 
 公共可选字段(除 holidays-cn 外通用):`note`(进描述)、`time`(HH:mm 定时)、
 `alarms`(ISO8601 负时长)、`alarm_days_before`(提前 N 天)。
@@ -225,7 +229,7 @@ ios-cal-sub/
 │   ├── types.ts              # zod 配置校验 schema
 │   ├── dates.ts              # 日期工具(纯 UTC 语义)
 │   ├── ics.ts                # 极简 RFC 5545 ICS 写入器(折行/转义/VTIMEZONE/VALARM/RRULE)
-│   ├── sources.ts            # 五类事件源展开(holidays-cn/lunar/solar/rule/solar-term)
+│   ├── sources.ts            # 六类事件源展开(holidays-cn/lunar/solar/rule/solar-term/solar-terms/lunar-festival)
 │   └── generate.ts           # 主入口:配置 → dist/*.ics + index.html + manifest.json
 ├── scripts/fetch-holidays.ts # 拉取 holiday-cn 官方数据
 ├── src/web/                  # 局域网编辑器(server.ts + editor.html,可选)
@@ -238,3 +242,7 @@ ios-cal-sub/
 ├── dist/                     # 生成产物:*.ics + index.html + manifest.json + editor/
 └── .github/workflows/deploy.yml
 ```
+
+## 📄 License
+
+[MIT](LICENSE) — 自由使用、修改、分发,保留版权声明即可。

@@ -132,6 +132,7 @@ const TYPES = {
   'solar-term':     { icon:'⛅', label:'节气事件' },
   'lunar-festival': { icon:'🏮', label:'农历传统节日' },
   'holidays-cn':    { icon:'🇨🇳', label:'节假日数据源' },
+  'solar-terms':    { icon:'⛅', label:'二十四节气(全部)' },
 };
 const TERMS = ['立春','雨水','惊蛰','春分','清明','谷雨','立夏','小满','芒种','夏至','小暑','大暑',
                '立秋','处暑','白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至','小寒','大寒'];
@@ -254,6 +255,8 @@ function summarize(s){
     parts.push(s.festival||'(未选节日)');
   } else if (s.type==='holidays-cn'){
     parts.push([s.include_rest_days!==false&&'放假', s.include_workdays&&'补班'].filter(Boolean).join('+')||'未选择');
+  } else if (s.type==='solar-terms'){
+    parts.push('二十四节气 · 全部24个');
   }
   if (s.time) parts.push(s.time);
   const al=[...(s.alarm_days_before??[]).map(n=>`提前${n}天`), ...(s.alarms??[])];
@@ -420,6 +423,8 @@ const FORMS={
   'read-holidays-cn'(s){s.include_rest_days=$('f_rest').classList.contains('on');
     s.include_workdays=$('f_work').classList.contains('on');
     delete s.title;delete s.time;delete s.note;delete s.alarms;delete s.alarm_days_before;},
+  'solar-terms'(s){return `<p class='hint'>一次性展开全部二十四节气(立春~大寒),标题自动取节气名;无需逐个配置。下方公共字段(时间/提醒/备注)对所有节气生效。</p>`;},
+  'read-solar-terms'(s){ delete s.title; },
 };
 function renderRuleCond(){
   const box=$('ruleCond'); if(!box)return;
@@ -550,7 +555,7 @@ function validateCfg(){
     if(!/^[a-z0-9][a-z0-9-]{0,62}$/.test(c.id)) errs.push(`日历 ID 非法:${c.id}`);
     if(!c.name) errs.push(`日历「${c.id}」缺名称`);
     c.sources.forEach((s,j)=>{
-      if(s.type!=='holidays-cn' && !(s.title??'').trim()) errs.push(`${at(j)} 缺标题`);
+      if(s.type!=='holidays-cn' && s.type!=='solar-terms' && !(s.title??'').trim()) errs.push(`${at(j)} 缺标题`);
       if(s.time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(s.time)) errs.push(`${at(j)} 时间须为 HH:mm`);
       switch(s.type){
         case 'lunar':

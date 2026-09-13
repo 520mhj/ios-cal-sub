@@ -17,6 +17,7 @@ import type {
   RuleSource,
   SolarSource,
   SolarTermSource,
+  SolarTermsSource,
   Source,
 } from './types.js';
 import { addDays, cmpDate, isLeapYear, lastDayOfMonth, todayLocal } from './dates.js';
@@ -46,7 +47,7 @@ export function makeUid(calId: string, ...parts: (string | number)[]): string {
 }
 
 function mergeAlarms(
-  src: LunarSource | SolarSource | RuleSource | SolarTermSource | LunarFestivalSource,
+  src: LunarSource | SolarSource | RuleSource | SolarTermSource | LunarFestivalSource | SolarTermsSource,
 ): string[] {
   const set = new Set(src.alarms ?? []);
   for (const n of src.alarm_days_before ?? []) set.add(`-P${n}D`);
@@ -579,6 +580,33 @@ export function expandLunarFestival(
   return out;
 }
 
+/** ---------- 二十四节气(全部一次性展开) ---------- */
+
+export function expandSolarTermsAll(
+  src: SolarTermsSource,
+  win: Window,
+  calId: string,
+): Occurrence[] {
+  const all = solarTermDatesInRange(win);
+  const out: Occurrence[] = [];
+  for (const term of SOLAR_TERM_NAMES) {
+    const dates = all.get(term) ?? [];
+    for (const d of dates) {
+      if (cmpDate(d, win.start) < 0 || cmpDate(d, win.end) > 0) continue;
+      out.push({
+        uid: makeUid(calId, `terms-all-${term}`, d),
+        start: d,
+        end: addDays(d, 1),
+        time: src.time ?? null,
+        summary: `⛅ ${term}`,
+        description: [`二十四节气 · ${term}`, src.note].filter(Boolean).join(' | '),
+        alarms: mergeAlarms(src),
+      });
+    }
+  }
+  return out;
+}
+
 /** ---------- 总入口 ---------- */
 
 export function expandSource(
@@ -599,5 +627,7 @@ export function expandSource(
       return expandSolarTerm(src, ctx.win, ctx.calId);
     case 'lunar-festival':
       return expandLunarFestival(src, ctx.win, ctx.calId);
+    case 'solar-terms':
+      return expandSolarTermsAll(src, ctx.win, ctx.calId);
   }
 }

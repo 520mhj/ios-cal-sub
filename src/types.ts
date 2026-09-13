@@ -154,6 +154,12 @@ export const lunarFestivalSource = z.object({
   ...eventCommonOmitTitle,
 });
 
+/** 一次性展开全部二十四节气(标题自动取节气名),避免在配置里逐条写 24 个 solar-term */
+export const solarTermsSource = z.object({
+  type: z.literal('solar-terms'),
+  ...eventCommonOmitTitle,
+});
+
 export const sourceSchema = z.discriminatedUnion('type', [
   holidaysCnSource,
   lunarSource,
@@ -161,6 +167,7 @@ export const sourceSchema = z.discriminatedUnion('type', [
   ruleSource,
   solarTermSource,
   lunarFestivalSource,
+  solarTermsSource,
 ]);
 
 export type HolidayCnSource = z.infer<typeof holidaysCnSource>;
@@ -169,6 +176,7 @@ export type SolarSource = z.infer<typeof solarSource>;
 export type RuleSource = z.infer<typeof ruleSource>;
 export type SolarTermSource = z.infer<typeof solarTermSource>;
 export type LunarFestivalSource = z.infer<typeof lunarFestivalSource>;
+export type SolarTermsSource = z.infer<typeof solarTermsSource>;
 export type Source = z.infer<typeof sourceSchema>;
 
 /** ---------- 日历与全局配置 ---------- */
