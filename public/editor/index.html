@@ -533,7 +533,8 @@ function validateCfg(){
     if(!/^[a-z0-9][a-z0-9-]{0,62}$/.test(c.id)) errs.push(`日历 ID 非法:${c.id}`);
     if(!c.name) errs.push(`日历「${c.id}」缺名称`);
     c.sources.forEach((s,j)=>{
-      if(s.type!=='holidays-cn' && s.type!=='solar-terms' && !(s.title??'').trim()) errs.push(`${at(j)} 缺标题`);
+      // holidays-cn / solar-terms / lunar-festival 的标题自动生成,不需要手动填
+      if(s.type!=='holidays-cn' && s.type!=='solar-terms' && s.type!=='lunar-festival' && !(s.title??'').trim()) errs.push(`${at(j)} 缺标题`);
       if(s.time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(s.time)) errs.push(`${at(j)} 时间须为 HH:mm`);
       switch(s.type){
         case 'lunar':
