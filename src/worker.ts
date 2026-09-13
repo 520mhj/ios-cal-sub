@@ -110,10 +110,10 @@ async function savePrivateCalendars(env: Env, calendars: CalendarDef[]): Promise
 }
 
 /** 合并内置公开配置 + KV 私人配置 */
-async function getMergedConfig(env: Env): Promise<AppConfig> {
+async function getMergedConfig(env: Env, siteBaseUrl = ''): Promise<AppConfig> {
   const privateCals = await loadPrivateCalendars(env);
   const cfg: AppConfig = {
-    site_base_url: env.SITE_BASE_URL ?? '',
+    site_base_url: siteBaseUrl,
     defaults: { ...DEFAULTS },
     calendars: [...PUBLIC_CALENDARS, ...privateCals],
   };
@@ -219,13 +219,16 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+    // 站点域名:优先用环境变量 SITE_BASE_URL,否则自动从请求 URL 中获取
+    // 这样用户不需要手动配置 SITE_BASE_URL,部署后自动生效
+    const siteBaseUrl = (env.SITE_BASE_URL ?? '').trim() || url.origin;
 
     // ---- API: 读取配置 ----
     if (path === '/api/config' && method === 'GET') {
       if (!(await checkAuth(request, env))) {
         return jsonResponse({ ok: false, error: '未授权:请在请求头 X-Editor-Key 中提供 UUID' }, 401);
       }
-      const cfg = await getMergedConfig(env);
+      const cfg = await getMergedConfig(env, siteBaseUrl);
       const privateCals = await loadPrivateCalendars(env);
       return jsonResponse({
         ok: true,
@@ -258,7 +261,7 @@ export default {
       }
       // 用完整配置(公开+私人)过 zod 校验
       const fullCfg: AppConfig = {
-        site_base_url: env.SITE_BASE_URL ?? '',
+        site_base_url: siteBaseUrl,
         defaults: { ...DEFAULTS },
         calendars: [...PUBLIC_CALENDARS, ...(body as CalendarDef[])],
       };
@@ -293,7 +296,7 @@ export default {
     const privateMatch = path.match(/^\/s\/([a-f0-9]{32})\/([a-z0-9][a-z0-9-]{0,62})\.ics$/);
     if (privateMatch) {
       const [, token, calId] = privateMatch;
-      const cfg = await getMergedConfig(env);
+      const cfg = await getMergedConfig(env, siteBaseUrl);
       const cal = cfg.calendars.find((c) => c.id === calId);
       if (!cal || cal.access !== 'private') {
         return new Response('Not Found', { status: 404 });
@@ -314,7 +317,7 @@ export default {
     const publicMatch = path.match(/^\/([a-z0-9][a-z0-9-]{0,62})\.ics$/);
     if (publicMatch) {
       const [, calId] = publicMatch;
-      const cfg = await getMergedConfig(env);
+      const cfg = await getMergedConfig(env, siteBaseUrl);
       const cal = cfg.calendars.find((c) => c.id === calId);
       if (!cal || cal.access !== 'public') {
         return new Response('Not Found', { status: 404 });
@@ -327,12 +330,12 @@ export default {
 
     // ---- 首页 ----
     if (path === '/' || path === '/index.html') {
-      const cfg = await getMergedConfig(env);
+      const cfg = await getMergedConfig(env, siteBaseUrl);
       const rows = await buildSummaryRows(cfg, env.EDITOR_KEY);
       // 首页只展示公开日历
       const publicRows = rows.filter((r) => r.access === 'public');
       const html = indexHtml(
-        env.SITE_BASE_URL ?? '',
+        siteBaseUrl,
         publicRows,
         new Date().toISOString().replace('T', ' ').slice(0, 19),
       );
