@@ -83,7 +83,7 @@ export function indexHtml(
 </style>
 </head>
 <body>
-<h1>📅 iOS 日历订阅</h1>
+<h1>📅 iOS 日历订阅 <a href="/editor/" style="font-size:14px;font-weight:normal;opacity:.6;margin-left:12px">⚙️ 编辑器</a></h1>
 <p>在 iPhone 上打开本页,点「订阅(webcal)」即可;或在 <b>设置 → 应用 → 日历 → 日历账户 → 添加订阅日历</b> 中粘贴下方链接。</p>
 ${cards}
 <footer>由 ios-cal-sub 生成于 ${escapeHtml(generatedAt)}。数据来源:<a href="https://github.com/NateScarlet/holiday-cn">NateScarlet/holiday-cn</a>(国务院公告自动化解析)。</footer>
