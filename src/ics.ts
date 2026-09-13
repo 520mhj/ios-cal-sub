@@ -19,8 +19,10 @@ export function escapeText(s: string): string {
 
 /** 按 RFC 5545 把超长行折叠为 ≤75 八字节的连续行(续行前导一个空格) */
 export function foldLine(line: string): string {
-  const bytes = Buffer.from(line, 'utf8');
+  // 用 TextEncoder 替代 Buffer,兼容 Cloudflare Workers 运行时
+  const bytes = new TextEncoder().encode(line);
   if (bytes.length <= 75) return line;
+  const decoder = new TextDecoder();
   const parts: string[] = [];
   let pos = 0;
   let first = true;
@@ -30,7 +32,7 @@ export function foldLine(line: string): string {
     // 回退到 UTF-8 字符边界,避免拆开多字节字符
     while (end > pos && (bytes[end]! & 0xc0) === 0x80) end--;
     if (end === pos) end = Math.min(pos + maxContent, bytes.length); // 防御异常字节
-    parts.push((first ? '' : ' ') + bytes.subarray(pos, end).toString('utf8'));
+    parts.push((first ? '' : ' ') + decoder.decode(bytes.subarray(pos, end)));
     pos = end;
     first = false;
   }
