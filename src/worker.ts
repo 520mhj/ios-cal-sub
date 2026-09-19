@@ -328,6 +328,40 @@ export default {
       if (!cal || cal.access !== 'public') {
         return new Response('Not Found', { status: 404 });
       }
+      // 浏览器访问(扫码后打开)→ 返回中间页,自动跳转 webcals:// 调起日历应用
+      // 日历应用直接访问(Accept 不含 text/html)→ 直接返回 .ics 文件
+      const accept = request.headers.get('Accept') ?? '';
+      if (accept.includes('text/html')) {
+        const host = siteBaseUrl.replace(/^https?:\/\//, '');
+        const webcalUrl = `webcals://${host}/${calId}.ics`;
+        const downloadUrl = `${siteBaseUrl}/${calId}.ics`;
+        const html = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>订阅日历 · ${cal.name}</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", sans-serif; max-width: 480px; margin: 60px auto; padding: 0 20px; text-align: center; }
+  h1 { font-size: 22px; }
+  .btn { display: inline-block; padding: 12px 24px; border-radius: 10px; background: #0a84ff; color: #fff; text-decoration: none; font-size: 16px; margin: 16px 0; }
+  .tip { color: #888; font-size: 14px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>📅 ${cal.name}</h1>
+<p>正在自动添加为订阅日历...</p>
+<p class="tip">如果没有自动弹出日历应用，请点击下方按钮</p>
+<a class="btn" href="${webcalUrl}">📅 点击添加为订阅日历</a>
+<p class="tip">订阅后日历将每 12 小时自动更新</p>
+<p class="tip"><a href="${downloadUrl}">直接下载 .ics 文件</a></p>
+<script>window.location.href = '${webcalUrl}';</script>
+</body>
+</html>`;
+        return new Response(html, {
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
+      }
       const { ics } = await generateIcs(cal, cfg);
       return new Response(ics, {
         headers: { 'content-type': 'text/calendar; charset=utf-8' },

@@ -38,8 +38,9 @@ export function indexHtml(
     }
     if (!base) return `<span class="btn disabled" title="部署后可订阅">📲 部署后可订阅</span>`;
     const subscribeUrl = `${webcalProto}${host}/${r.file}`;
+    const qrUrl = `${base}/${r.file}`; // 二维码用 https://,Worker 检测到浏览器访问会自动跳转 webcals://
     return `<a class="btn" href="${subscribeUrl}">📲 订阅(webcal)</a>` +
-      `<button type="button" class="btn ghost" data-qr="${subscribeUrl}" data-name="${escapeHtml(r.name)}">🔳 扫码订阅</button>`;
+      `<button type="button" class="btn ghost" data-qr="${qrUrl}" data-name="${escapeHtml(r.name)}">🔳 扫码订阅</button>`;
   };
   const cards = rows
     .map(
@@ -94,7 +95,7 @@ ${cards}
   <div class="qr-box">
     <h3 id="qrTitle">扫码订阅</h3>
     <div id="qrSvg"></div>
-    <p class="qr-tip">手机相机对准二维码 → 屏幕上方出现链接横幅 → 点击横幅即可自动添加为订阅日历(定期自动更新)。若扫码后无反应,可复制下方链接到「设置 → 日历 → 添加订阅日历」中粘贴。</p>
+    <p class="qr-tip">手机相机对准二维码 → 屏幕上方出现链接横幅 → 点击后自动打开日历应用并添加为订阅日历(每 12 小时自动更新)。若扫码无反应,可复制下方链接到「设置 → 日历 → 添加订阅日历」中粘贴。</p>
     <input readonly id="qrLink" onclick="this.select()">
     <div class="qr-actions">
       <button type="button" class="btn" id="qrCopy">📋 复制链接</button>
